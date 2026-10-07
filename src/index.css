@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-canvas: #FAF7EE;
+    --bg-surface: #F2EBDC;
+    --bg-card: #FFFFFF;
+    --text-main: #2A2315;
+    --text-muted: #6B5E4A;
+    --border-color: #E2D7C3;
+    --accent-color: #92400E;
+    --citation-bg: #FEF3C7;
+    --citation-text: #92400E;
+    --citation-border: #FCD34D;
+    --proviso-bg: #FDF9EE;
+    --proviso-border: #D97706;
+    --explanation-bg: #F6F4EB;
+    --explanation-border: #0D9488;
+  }
+
+  .theme-parchment {
+    --bg-canvas: #FAF7EE;
+    --bg-surface: #F3EBD8;
+    --bg-card: #FFFDF9;
+    --text-main: #2B2416;
+    --text-muted: #72634C;
+    --border-color: #E2D6C0;
+    --accent-color: #92400E;
+    --citation-bg: #FEF3C7;
+    --citation-text: #92400E;
+    --citation-border: #FCD34D;
+    --proviso-bg: #FDF9EE;
+    --proviso-border: #D97706;
+    --explanation-bg: #F5F1E5;
+    --explanation-border: #0D9488;
+  }
+
+  .theme-slate {
+    --bg-canvas: #F8FAFC;
+    --bg-surface: #F1F5F9;
+    --bg-card: #FFFFFF;
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --border-color: #E2E8F0;
+    --accent-color: #1D4ED8;
+    --citation-bg: #EFF6FF;
+    --citation-text: #1D4ED8;
+    --citation-border: #BFDBFE;
+    --proviso-bg: #F8FAFC;
+    --proviso-border: #3B82F6;
+    --explanation-bg: #F1F5F9;
+    --explanation-border: #0284C7;
+  }
+
+  .theme-dark {
+    --bg-canvas: #090D16;
+    --bg-surface: #0F172A;
+    --bg-card: #182234;
+    --text-main: #F1F5F9;
+    --text-muted: #94A3B8;
+    --border-color: #334155;
+    --accent-color: #38BDF8;
+    --citation-bg: #1E293B;
+    --citation-text: #38BDF8;
+    --citation-border: #0284C7;
+    --proviso-bg: #141E2E;
+    --proviso-border: #F59E0B;
+    --explanation-bg: #0F1F2C;
+    --explanation-border: #14B8A6;
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-main);
+    overflow-x: hidden;
+  }
+}
+
+/* Custom delicate scrollbars for legal reader */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(140, 130, 115, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(140, 130, 115, 0.45);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.25);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.45);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Legal text formatting */
+.statute-text {
+  line-height: 1.8;
+  word-spacing: 0.05em;
+  letter-spacing: 0.01em;
+}
+
+/* Highlight flash for scrolled-to provisions */
+@keyframes provision-pulse {
+  0% {
+    background-color: rgba(245, 158, 11, 0.35);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.target-highlight {
+  animation: provision-pulse 2.5s ease-out;
+}
