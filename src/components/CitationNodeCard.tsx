@@ -48,7 +48,7 @@ export const CitationNodeCard: React.FC<CitationNodeCardProps> = ({
               className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${style.badgeBg} ${style.badgeText} ${style.badgeBorder}`}
             >
               <span>L{node.level}</span>
-              <span className="hidden sm:inline">| {style.levelName.split(':')[1]}</span>
+              <span className="hidden sm:inline">| {style.levelShort}</span>
             </span>
 
             {/* Cycle warning badge */}
@@ -73,7 +73,7 @@ export const CitationNodeCard: React.FC<CitationNodeCardProps> = ({
             <button
               type="button"
               onClick={() => onSelectCitation(citation)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors"
               title="Inspect details in side panel"
             >
               <Compass className="w-3 h-3 text-indigo-500" />
@@ -84,7 +84,7 @@ export const CitationNodeCard: React.FC<CitationNodeCardProps> = ({
               <button
                 type="button"
                 onClick={() => onJumpToProvision(resolvedTarget.provision!.eid)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors"
                 title="Jump to this provision in the main reader"
               >
                 <ArrowRight className="w-3 h-3 text-emerald-500" />
@@ -116,11 +116,21 @@ export const CitationNodeCard: React.FC<CitationNodeCardProps> = ({
             <span>{resolvedTarget.displayTitle}</span>
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Referenced as: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">"{citation.raw_text}"</span>
+            Referenced as:{' '}
+            <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
+              &ldquo;{citation.rawText}&rdquo;
+            </span>
+            {node.originEid && node.originEid !== citation.parentEid && (
+              <span className="block mt-0.5">
+                Found in{' '}
+                <span className="font-mono">{node.originEid}</span>
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Text preview snippet */}
+        {/* Text preview snippet. The resolver truncates this, so a deep cascade
+            cannot pull hundreds of kilobytes of statute text into the DOM. */}
         {resolvedTarget.previewSnippet && (
           <div className="text-xs sm:text-[13px] text-slate-600 dark:text-slate-300 bg-white/80 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60 statute-text max-h-28 overflow-y-auto">
             {resolvedTarget.previewSnippet}
@@ -130,8 +140,12 @@ export const CitationNodeCard: React.FC<CitationNodeCardProps> = ({
         {/* Branch stats indicator */}
         {hasChildren && !isExpanded && (
           <div className="mt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
-            <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
-            <span>{children.length} deeper citation{children.length > 1 ? 's' : ''} available. Click arrow to expand cascade.</span>
+            <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
+            <span>
+              {children.length} deeper citation{children.length > 1 ? 's' : ''}
+              {node.hiddenChildCount > 0 && ` (+${node.hiddenChildCount} more hidden)`} available. Click arrow
+              to expand cascade.
+            </span>
           </div>
         )}
       </div>

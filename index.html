@@ -2,14 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23854d0e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z'/><path d='M6 6h10'/><path d='M6 10h10'/></svg>" />
+    <!--
+      A provision graph: one root node fanning to two children, which is what
+      the reader turns a statute into. Indigo carries the app's accent, amber the
+      parchment reading theme.
+    -->
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f46e5'/><path d='M16 8.5v4.5M16 13l-6 4.5M16 13l6 4.5M10 17.5v3.5M22 17.5v3.5' stroke='%23fbbf24' stroke-width='1.7' stroke-linecap='round' opacity='0.85'/><circle cx='16' cy='6.5' r='3' fill='white'/><circle cx='10' cy='23' r='2.6' fill='white'/><circle cx='22' cy='23' r='2.6' fill='white'/></svg>"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AKN Legal Reader & Citation Cascade - CGST Act 2017</title>
+    <title>StatuteGraph — Statutory structure reader</title>
+    <meta
+      name="description"
+      content="In-browser reader for dense statutes, acts and cross-referenced PDFs. Renders the provision hierarchy as a navigable graph, resolves every citation in both directions, and never uploads a document anywhere."
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&display=swap" rel="stylesheet">
   </head>
-  <body class="bg-[#FAF7EE] text-[#2A2315] antialiased selection:bg-amber-200 selection:text-amber-900 transition-colors duration-200">
+  <!--
+    No colour utilities here on purpose. A `bg-[#FAF7EE]` utility on <body>
+    (specificity 0,1,0) beats `body { background-color: var(--bg-canvas) }`
+    in the base layer (0,0,1), so the dark theme's canvas could never apply
+    and light parchment showed through behind the panels.
+  -->
+  <body class="antialiased selection:bg-amber-200 selection:text-amber-900 transition-colors duration-200">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

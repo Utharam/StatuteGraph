@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { IndexedAknData, cleanStatuteText, extractProvisionTitle } from '../services/aknLoader';
+import { IndexedAknData, cleanStatuteText } from '../services/aknLoader';
 import { Provision } from '../types/akn';
 import { Search, X, BookOpen, ArrowRight, CornerDownLeft } from 'lucide-react';
 
@@ -47,53 +47,62 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Filter provisions matching query
+// Two-pass search.
+  //
+  // The previous single pass capped at 40 matches while walking
+  // `indexData.provisions`, and promoted exact section-number hits with
+  // `unshift`. Searching "10" therefore filled the cap with earlier
+  // text matches and never reached section 10 at all: a search for a section
+  // by number could return nothing. Number and title matches are collected
+  // first, so they always win regardless of where they sit in the array.
   const results = useMemo(() => {
     if (!query.trim()) return [];
-    const q = query.toLowerCase().trim();
+    const q = query.trim().toLowerCase();
 
-    const matches: {
+    interface Hit {
       provision: Provision;
-      title: string;
       matchType: 'section' | 'title' | 'text';
       snippet: string;
-    }[] = [];
+    }
+
+    const primary: Hit[] = [];
+    const secondary: Hit[] = [];
+    const TEXT_CAP = 40;
 
     for (const prov of indexData.provisions) {
-      if (matches.length >= 40) break; // cap search results for speed
-
-      const title = extractProvisionTitle(prov);
-      const text = cleanStatuteText(prov.text || '');
       const num = (prov.num || '').toLowerCase();
+      const text = prov.text || '';
 
-      if (num === q || (num && `section ${num}` === q)) {
-        matches.unshift({
-          provision: prov,
-          title,
-          matchType: 'section',
-          snippet: text.slice(0, 140),
-        });
-      } else if (title.toLowerCase().includes(q)) {
-        matches.push({
-          provision: prov,
-          title,
-          matchType: 'title',
-          snippet: text.slice(0, 140),
-        });
-      } else if (text.toLowerCase().includes(q)) {
+      if (num && (num === q || `section ${num}` === q || num === q.replace(/^section\s*/, ''))) {
+        primary.push({ provision: prov, matchType: 'section', snippet: cleanStatuteText(text).slice(0, 140) });
+        continue;
+      }
+
+      const title = prov.title;
+      if (title.toLowerCase().includes(q)) {
+        primary.push({ provision: prov, matchType: 'title', snippet: cleanStatuteText(text).slice(0, 140) });
+        continue;
+      }
+
+      if (secondary.length < TEXT_CAP && text) {
         const idx = text.toLowerCase().indexOf(q);
-        const start = Math.max(0, idx - 40);
-        const end = Math.min(text.length, idx + q.length + 80);
-        matches.push({
-          provision: prov,
-          title,
-          matchType: 'text',
-          snippet: (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : ''),
-        });
+        if (idx >= 0) {
+          const start = Math.max(0, idx - 40);
+          const end = Math.min(text.length, idx + q.length + 80);
+          secondary.push({
+            provision: prov,
+            matchType: 'text',
+            snippet:
+              (start > 0 ? '...' : '') +
+              cleanStatuteText(text.substring(start, end)) +
+              (end < text.length ? '...' : ''),
+          });
+        }
       }
     }
 
-    return matches;
+    // Stable within each band so document order is preserved.
+    return [...primary, ...secondary];
   }, [query, indexData]);
 
   // Handle arrow key navigation in results
@@ -116,7 +125,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/50 ">
       <div
         className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[80vh]"
         onClick={(e) => e.stopPropagation()}
@@ -155,7 +164,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           {query.trim() === '' ? (
             <div className="py-12 text-center text-slate-400 space-y-2">
               <BookOpen className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
-              <p className="text-sm font-medium">Type to search through all 1,692 provisions of CGST Act</p>
+              <p className="text-sm font-medium">Type to search across sections, sub-sections, clauses and provisos</p>
               <p className="text-xs text-slate-400">
                 Quick jump: "37" &bull; "input tax credit" &bull; "registration" &bull; "proviso"
               </p>
@@ -170,7 +179,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               const isSelected = i === selectedIndex;
               return (
                 <div
-                  key={`${res.provision.eid}-${i}`}
+                  key={res.provision.eid}
                   onClick={() => {
                     onSelectProvision(res.provision.eid);
                     onClose();
@@ -188,7 +197,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         {res.provision.num ? `§ ${res.provision.num}` : res.provision.kind}
                       </span>
                       <span className="font-serif font-semibold text-sm truncate">
-                        {res.title}
+                        {res.provision.title}
                       </span>
                       <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
                         {res.matchType}

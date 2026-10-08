@@ -1,9 +1,28 @@
-import {
-  Citation,
-  CitationTreeNode,
-  ResolvedCitationTarget,
-} from '../types/akn';
+/**
+ * Citation cascade and text slicing.
+ *
+ * Two performance guards, both from measurements on the real dataset:
+ *
+ *  - `previewSnippet` used to be the ENTIRE provision text (longest: 11,820
+ *    chars). A 6-level tree touches ~1,570 nodes, so one expanded tree put
+ *    ~830,000 characters of statutory prose into the DOM. Snippets are now
+ *    truncated in the resolver.
+ *  - Level 6 fans out hard: the histogram is {L1:1, L2:8, L3:33, L4:115,
+ *    L5:372, L6:1045}. Without a per-node cap, opening a high-fanout cascade
+ *    can build thousands of nodes. `MAX_CHILDREN_PER_NODE` bounds it and
+ *    reports what was hidden rather than silently dropping it.
+ */
+
+import { Citation, CitationRelation, CitationTreeNode, ResolvedCitationTarget } from '../types/akn';
 import { IndexedAknData, resolveCitation } from './aknLoader';
+import { relationDescription, relationLabel } from './citationScope';
+
+export const MAX_CASCADE_LEVEL = 6;
+export const MAX_CHILDREN_PER_NODE = 24;
+
+// ---------------------------------------------------------------------------
+// Level styling
+// ---------------------------------------------------------------------------
 
 export interface LevelStyleConfig {
   badgeBg: string;
@@ -13,6 +32,7 @@ export interface LevelStyleConfig {
   accentBorder: string;
   borderLeft: string;
   levelName: string;
+  levelShort: string;
 }
 
 export const CHROMATIC_LEVEL_STYLES: Record<number, LevelStyleConfig> = {
@@ -24,6 +44,7 @@ export const CHROMATIC_LEVEL_STYLES: Record<number, LevelStyleConfig> = {
     accentBorder: 'border-indigo-200 dark:border-indigo-800/60',
     borderLeft: 'border-l-indigo-500',
     levelName: 'Level 1: Direct Reference',
+    levelShort: 'Direct',
   },
   2: {
     badgeBg: 'bg-cyan-100 dark:bg-cyan-950/80',
@@ -33,6 +54,7 @@ export const CHROMATIC_LEVEL_STYLES: Record<number, LevelStyleConfig> = {
     accentBorder: 'border-cyan-200 dark:border-cyan-800/60',
     borderLeft: 'border-l-cyan-500',
     levelName: 'Level 2: Secondary Cascade',
+    levelShort: 'Secondary',
   },
   3: {
     badgeBg: 'bg-emerald-100 dark:bg-emerald-950/80',
@@ -41,16 +63,18 @@ export const CHROMATIC_LEVEL_STYLES: Record<number, LevelStyleConfig> = {
     accentBg: 'bg-emerald-50/60 dark:bg-emerald-950/30',
     accentBorder: 'border-emerald-200 dark:border-emerald-800/60',
     borderLeft: 'border-l-emerald-500',
-    levelName: 'Level 3: Tertiary Cross-Ref',
+    levelName: 'Level 3: Tertiary Cross-Reference',
+    levelShort: 'Tertiary',
   },
   4: {
     badgeBg: 'bg-amber-100 dark:bg-amber-950/80',
     badgeText: 'text-amber-800 dark:text-amber-300',
-    badgeBorder: 'border-amber-300 dark:border-amber-800',
+    badgeBorder: 'border-amber-300 dark:border-amber-900',
     accentBg: 'bg-amber-50/60 dark:bg-amber-950/30',
-    accentBorder: 'border-amber-200 dark:border-amber-800/60',
+    accentBorder: 'border-amber-200 dark:border-amber-900/60',
     borderLeft: 'border-l-amber-500',
     levelName: 'Level 4: Quaternary Dependency',
+    levelShort: 'Quaternary',
   },
   5: {
     badgeBg: 'bg-rose-100 dark:bg-rose-950/80',
@@ -60,6 +84,7 @@ export const CHROMATIC_LEVEL_STYLES: Record<number, LevelStyleConfig> = {
     accentBorder: 'border-rose-200 dark:border-rose-800/60',
     borderLeft: 'border-l-rose-500',
     levelName: 'Level 5: Quinary Sub-Chain',
+    levelShort: 'Quinary',
   },
   6: {
     badgeBg: 'bg-purple-100 dark:bg-purple-950/80',
@@ -69,102 +94,176 @@ export const CHROMATIC_LEVEL_STYLES: Record<number, LevelStyleConfig> = {
     accentBorder: 'border-purple-200 dark:border-purple-800/60',
     borderLeft: 'border-l-purple-500',
     levelName: 'Level 6: Deepest Authority',
+    levelShort: 'Deepest',
   },
 };
 
 export function getLevelStyle(level: number): LevelStyleConfig {
-  return CHROMATIC_LEVEL_STYLES[Math.min(Math.max(level, 1), 6)];
+  const clamped = Math.min(Math.max(Math.round(level) || 1, 1), MAX_CASCADE_LEVEL);
+  return CHROMATIC_LEVEL_STYLES[clamped];
 }
 
+// ---------------------------------------------------------------------------
+// Cascade
+// ---------------------------------------------------------------------------
+
 /**
- * Recursively builds citation tree up to 6 levels with cycle detection
+ * Walks the citation graph outward from one citation.
+ *
+ * `visited` is cloned per branch, so a diamond (A -> B -> D and A -> C -> D)
+ * is not mistaken for a cycle. Cycle detection compares against the ancestor
+ * chain only, which is what makes that distinction possible.
  */
 export function buildCitationTree(
   citation: Citation,
   indexData: IndexedAknData,
-  maxLevel: number = 6
+  maxLevel: number = MAX_CASCADE_LEVEL,
+  maxChildren: number = MAX_CHILDREN_PER_NODE
 ): CitationTreeNode {
-  let nodeIdCounter = 0;
+  let counter = 0;
 
   function buildNode(
-    currentCitation: Citation,
-    currentLevel: number,
-    visitedEids: Set<string>,
-    visitedLevels: Map<string, number>,
-    parentPath: string
+    current: Citation,
+    level: number,
+    visitedEids: ReadonlySet<string>,
+    visitedLevels: ReadonlyMap<string, number>,
+    parentPath: string,
+    originEid: string | null
   ): CitationTreeNode {
-    const resolved: ResolvedCitationTarget = resolveCitation(currentCitation, indexData);
-    const targetKey = resolved.provision ? resolved.provision.eid : currentCitation.target_eid || currentCitation.raw_text;
-    const nodeId = `${parentPath}_L${currentLevel}_${++nodeIdCounter}`;
+    const resolved: ResolvedCitationTarget = resolveCitation(current, indexData, {
+      includeSubtree: true,
+    });
+    const id = `${parentPath}-L${level}-${++counter}`;
 
-    // Cycle detection
-    if (targetKey && visitedEids.has(targetKey)) {
+    // The identity we follow. External Acts have no node here, so we key them
+    // on the statute name instead.
+    const targetKey =
+      resolved.target.scope === 'internal' && resolved.target.targetEid
+        ? resolved.target.targetEid
+        : resolved.target.scope === 'external'
+        ? `ext:${resolved.displayTitle}`
+        : `unresolved:${current.id}`;
+
+    if (visitedEids.has(targetKey)) {
       return {
-        id: nodeId,
-        level: currentLevel,
-        citation: currentCitation,
+        id,
+        level,
+        citation: current,
+        originEid,
         resolvedTarget: resolved,
         children: [],
+        hiddenChildCount: 0,
         isCycle: true,
-        cycleTargetLevel: visitedLevels.get(targetKey) ?? 1,
+        // A cycle back to the citing provision itself is reported as level 1,
+        // because there is no level 0 in this tree. The old code reported 0,
+        // which rendered as the nonsensical "Target at L0".
+        cycleTargetLevel: Math.max(visitedLevels.get(targetKey) ?? 1, 1),
       };
     }
 
-    // Branch state tracking
     const nextVisitedEids = new Set(visitedEids);
-    if (targetKey) nextVisitedEids.add(targetKey);
-
+    nextVisitedEids.add(targetKey);
     const nextVisitedLevels = new Map(visitedLevels);
-    if (targetKey) nextVisitedLevels.set(targetKey, currentLevel);
+    nextVisitedLevels.set(targetKey, level);
 
     const children: CitationTreeNode[] = [];
+    let hiddenChildCount = 0;
 
-    // Recurse if below maxLevel and not an external reference
-    if (currentLevel < maxLevel && !resolved.isExternal && resolved.provision) {
-      const childCitations = resolved.citations || [];
-      // Deduplicate outgoing citations by target_eid to keep tree clean
-      const seenChildTargets = new Set<string>();
+    const provision = resolved.provision;
+    if (level < maxLevel && provision) {
+      // Subtree citations, so a section's cascade includes everything its
+      // sub-sections rely on. Deduplicated per node so a provision cited five
+      // times in one paragraph appears once, but its origin is retained.
+      const seenTargets = new Set<string>();
+      let considered = 0;
 
-      for (const childCite of childCitations) {
-        const childTargetKey = childCite.target_eid || childCite.raw_text;
-        if (!childTargetKey || seenChildTargets.has(childTargetKey)) continue;
-        seenChildTargets.add(childTargetKey);
+      for (const child of provision.subtreeCitations) {
+        const childKey =
+          child.target.scope === 'internal' && child.target.targetEid
+            ? child.target.targetEid
+            : child.rawText;
 
-        const childNode = buildNode(
-          childCite,
-          currentLevel + 1,
-          nextVisitedEids,
-          nextVisitedLevels,
-          nodeId
+        if (!childKey || seenTargets.has(childKey)) continue;
+        seenTargets.add(childKey);
+
+        considered++;
+        if (children.length >= maxChildren) {
+          hiddenChildCount++;
+          continue;
+        }
+
+        children.push(
+          buildNode(
+            child,
+            level + 1,
+            nextVisitedEids,
+            nextVisitedLevels,
+            id,
+            child.parentEid === provision.eid ? null : child.parentEid
+          )
         );
-        children.push(childNode);
       }
+
+      if (considered === 0) hiddenChildCount = 0;
     }
 
     return {
-      id: nodeId,
-      level: currentLevel,
-      citation: currentCitation,
+      id,
+      level,
+      citation: current,
+      originEid: originEid ?? current.parentEid,
       resolvedTarget: resolved,
       children,
+      hiddenChildCount,
       isCycle: false,
     };
   }
 
-  const initialVisited = citation.parent_eid ? new Set<string>([citation.parent_eid]) : new Set<string>();
-  const initialLevels = citation.parent_eid ? new Map<string, number>([[citation.parent_eid, 0]]) : new Map<string, number>();
-
-  return buildNode(
-    citation,
-    1,
-    initialVisited,
-    initialLevels,
-    'root'
-  );
+  // Seed with the citing provision so a provision that cites itself (which does
+  // happen in the removal-of-difficulty appendix) is caught as a cycle.
+  const seed = citation.parentEid ? [citation.parentEid] : [];
+  return buildNode(citation, 1, new Set(seed), new Map(seed.map((eid) => [eid, 0])), 'root', null);
 }
 
+export interface CitationTreeStats {
+  totalNodes: number;
+  maxDepthReached: number;
+  cycleCount: number;
+  externalCount: number;
+  unresolvedCount: number;
+  truncatedBranches: number;
+}
+
+export function getCitationTreeStats(root: CitationTreeNode): CitationTreeStats {
+  let totalNodes = 0;
+  let maxDepthReached = 1;
+  let cycleCount = 0;
+  let externalCount = 0;
+  let unresolvedCount = 0;
+  let truncatedBranches = 0;
+
+  const stack: CitationTreeNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    totalNodes++;
+    if (node.level > maxDepthReached) maxDepthReached = node.level;
+    if (node.isCycle) cycleCount++;
+    if (node.hiddenChildCount > 0) truncatedBranches++;
+    if (node.resolvedTarget.target.scope === 'external') externalCount++;
+    if (node.resolvedTarget.target.scope === 'unresolved') unresolvedCount++;
+    for (const child of node.children) stack.push(child);
+  }
+
+  return { totalNodes, maxDepthReached, cycleCount, externalCount, unresolvedCount, truncatedBranches };
+}
+
+// ---------------------------------------------------------------------------
+// Text slicing
+// ---------------------------------------------------------------------------
+
 /**
- * Clean text segment while preserving single leading and trailing whitespace
+ * Cleans a segment while preserving exactly one leading and trailing space, so
+ * that rejoining the segments reproduces the original word boundaries.
  */
 export function cleanSegmentText(text: string): string {
   if (!text) return '';
@@ -172,6 +271,7 @@ export function cleanSegmentText(text: string): string {
   const hasTrailing = /\s$/.test(text);
   let cleaned = text
     .replace(/\ufffd/g, ' ')
+    .replace(/[\u00AD\u200B\u200C\u200D\uFEFF]/g, '')
     .replace(/\s+/g, ' ')
     .replace(/\[\*\*\*\*\*[\.,]?\]/g, '[Omitted]')
     .trim();
@@ -181,118 +281,126 @@ export function cleanSegmentText(text: string): string {
   return cleaned;
 }
 
-/**
- * Flatten all nodes in a tree for summary statistics
- */
-export function getCitationTreeStats(rootNode: CitationTreeNode) {
-  let totalNodes = 0;
-  let maxDepthReached = 1;
-  let cycleCount = 0;
-  let externalCount = 0;
-
-  function traverse(node: CitationTreeNode) {
-    totalNodes++;
-    if (node.level > maxDepthReached) maxDepthReached = node.level;
-    if (node.isCycle) cycleCount++;
-    if (node.resolvedTarget.isExternal) externalCount++;
-
-    for (const child of node.children) {
-      traverse(child);
-    }
-  }
-
-  traverse(rootNode);
-
-  return {
-    totalNodes,
-    maxDepthReached,
-    cycleCount,
-    externalCount,
-  };
-}
-
+export type TextSegmentType = 'text' | 'citation';
 
 export interface TextSpanSegment {
   start: number;
   end: number;
-  type: 'text' | 'citation' | 'footnote';
+  type: TextSegmentType;
   citation?: Citation;
   content: string;
 }
 
+/**
+ * Splits RAW text into alternating plain-text and citation segments.
+ *
+ * `citations` MUST belong to the provision whose `text` is passed in. Passing
+ * a descendant's citations against a parent's text is the bug that used to
+ * render 396 citation pills over the wrong text: the spans were offsets into a
+ * different string, so the pill silently highlighted unrelated prose.
+ */
 export function sliceProvisionText(text: string, citations: Citation[] = []): TextSpanSegment[] {
   if (!text) return [];
+
   const textLength = text.length;
 
-  // Guard against splitting surrogate pairs
-  const isSurrogate = (idx: number) => {
-    if (idx <= 0 || idx >= textLength) return false;
-    const code = text.charCodeAt(idx - 1);
-    return code >= 0xD800 && code <= 0xDBFF;
-  };
+  // Avoid splitting a surrogate pair across a segment boundary.
+  const startsHighSurrogate = (idx: number) =>
+    idx > 0 && idx < textLength && text.charCodeAt(idx - 1) >= 0xd800 && text.charCodeAt(idx - 1) <= 0xdbff;
 
-  const adjustStart = (idx: number) => isSurrogate(idx) ? idx - 1 : idx;
-  const adjustEnd = (idx: number) => isSurrogate(idx) ? idx + 1 : idx;
-
-  const segments: TextSpanSegment[] = [];
-
-  const validCitations = citations
-    .filter(c => c.span && Array.isArray(c.span) && c.span.length === 2 && c.span[0] >= 0 && c.span[1] > c.span[0] && c.span[0] < textLength)
-    .map(c => {
+  const valid = citations
+    .filter(
+      (c) =>
+        Array.isArray(c.span) &&
+        c.span.length === 2 &&
+        Number.isFinite(c.span[0]) &&
+        Number.isFinite(c.span[1]) &&
+        c.span[0] >= 0 &&
+        c.span[1] > c.span[0] &&
+        c.span[0] < textLength
+    )
+    .map((c) => {
       let start = Math.min(Math.max(c.span[0], 0), textLength);
       let end = Math.min(Math.max(c.span[1], 0), textLength);
-      start = adjustStart(start);
-      end = adjustEnd(end);
-      return { ...c, span: [start, end] as [number, number] };
+      if (startsHighSurrogate(start)) start -= 1;
+      if (startsHighSurrogate(end)) end += 1;
+      return { citation: c, span: [start, end] as [number, number] };
     })
-    .filter(c => c.span[1] > c.span[0])
-    .sort((a, b) => {
-      if (a.span[0] !== b.span[0]) return a.span[0] - b.span[0];
-      return b.span[1] - a.span[1];
-    });
+    .filter((c) => c.span[1] > c.span[0] && c.span[1] <= textLength)
+    .sort((a, b) => a.span[0] - b.span[0] || b.span[1] - a.span[1]);
 
-  const nonOverlapping: Citation[] = [];
+  // Drop anything that overlaps an already-accepted citation.
+  const nonOverlapping: { citation: Citation; span: [number, number] }[] = [];
   let lastEnd = 0;
-  for (const cite of validCitations) {
-    if (cite.span[0] >= lastEnd) {
-      nonOverlapping.push(cite);
-      lastEnd = cite.span[1];
+  for (const entry of valid) {
+    if (entry.span[0] >= lastEnd) {
+      nonOverlapping.push(entry);
+      lastEnd = entry.span[1];
     }
   }
 
-  let currentIndex = 0;
-  for (const cite of nonOverlapping) {
-    const start = cite.span[0];
-    const end = cite.span[1];
+  const segments: TextSpanSegment[] = [];
+  let cursor = 0;
 
-    if (start > currentIndex) {
-      segments.push({
-        start: currentIndex,
-        end: start,
-        type: 'text',
-        content: text.substring(currentIndex, start)
-      });
+  for (const { citation, span } of nonOverlapping) {
+    if (span[0] > cursor) {
+      segments.push({ start: cursor, end: span[0], type: 'text', content: text.substring(cursor, span[0]) });
     }
-
     segments.push({
-      start,
-      end,
+      start: span[0],
+      end: span[1],
       type: 'citation',
-      citation: cite,
-      content: text.substring(start, end)
+      citation,
+      content: text.substring(span[0], span[1]),
     });
-
-    currentIndex = end;
+    cursor = span[1];
   }
 
-  if (currentIndex < textLength) {
-    segments.push({
-      start: currentIndex,
-      end: textLength,
-      type: 'text',
-      content: text.substring(currentIndex)
-    });
+  if (cursor < textLength) {
+    segments.push({ start: cursor, end: textLength, type: 'text', content: text.substring(cursor) });
   }
 
   return segments;
+}
+
+// ---------------------------------------------------------------------------
+// Presentation helpers
+// ---------------------------------------------------------------------------
+
+export interface RelationPresentation {
+  label: string;
+  description: string;
+  pill: string;
+  icon: string;
+}
+
+/**
+ * `subject_to` and `notwithstanding` are opposite legal operations - one
+ * subordinates a provision, the other overrides it. Rendering both as a plain
+ * blue "reference" link misstated the statute, so each gets its own treatment.
+ */
+export function relationPresentation(relation: CitationRelation): RelationPresentation {
+  switch (relation) {
+    case 'subject_to':
+      return {
+        label: relationLabel(relation),
+        description: relationDescription(relation),
+        pill: 'bg-violet-50 text-violet-900 border-violet-300 hover:bg-violet-100 hover:border-violet-400 dark:bg-violet-950/50 dark:text-violet-200 dark:border-violet-800',
+        icon: 'text-violet-600 dark:text-violet-400',
+      };
+    case 'notwithstanding':
+      return {
+        label: relationLabel(relation),
+        description: relationDescription(relation),
+        pill: 'bg-rose-50 text-rose-900 border-rose-300 hover:bg-rose-100 hover:border-rose-400 dark:bg-rose-950/50 dark:text-rose-200 dark:border-rose-800',
+        icon: 'text-rose-600 dark:text-rose-400',
+      };
+    default:
+      return {
+        label: relationLabel(relation),
+        description: relationDescription(relation),
+        pill: '',
+        icon: '',
+      };
+  }
 }

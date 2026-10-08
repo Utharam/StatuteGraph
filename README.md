@@ -1,140 +1,301 @@
-# AKN Legal Reader & Citation Cascade (v1.0.0)
+# StatuteGraph (v1.1.0)
 
-> A modern, high-performance legal reading web application for Akoma Ntoso (AKN) statutory legislation, featuring continuous reading, frictionless side-view citation peeking, recursive citation cascades up to 6 levels with cycle detection, and dynamic 3-tier index scroll synchronization. Built with React 18, TypeScript, Vite, and Tailwind CSS.
+**Statutory structure reader** — by [Utharam](https://utharam.in/)
 
----
+An in-browser reader for dense statutes, acts and cross-referenced PDFs. It turns
+a parsed statute document into a navigable **graph**: the provision hierarchy on
+one axis, every cross-reference resolved in both directions on the other.
 
-## 🌟 Key Features
+Nothing is uploaded. Documents are opened from your disk, indexed in memory, and
+stored only in your browser. Closing the tab clears the working set.
 
-### 1. Aspiring Continuous Legal Reading
-- **Statutory Typography**: Specially tailored with elegant serif legal typography (Newsreader, Charter, Merriweather) with proportional line spacing, balanced margins, and legible font size controls (`SM`, `BASE`, `LG`, `XL`).
-- **Semantic Legal Elements**:
-  - **Marginalia Section Badges**: Left-side statutory section identifiers (`§ 37`, `Sch I`).
-  - **Provisos**: Styled with legal amber left-accent borders, "Provided that" header tags, and distinct blockquote styling.
-  - **Explanations**: Dedicated teal banners and distinct typographic framing.
-  - **Amendment Footnotes**: Interactive markers (`[1]`, `[2]`, etc.) with popovers detailing the amending act, action (`Substituted`, `Omitted`, `Inserted`), and official enforcement date.
-- **Three Reading Themes**:
-  - **Parchment**: Warm sepia and ivory palette (`#FAF7EE` / `#2A2315`) mirroring physical legal codices.
-  - **Slate**: Clean neutral white and slate palette (`#F8FAFC` / `#0F172A`) for high-contrast clarity.
-  - **Obsidian Dark**: Low-fatigue dark palette (`#090D16` / `#F1F5F9`) designed for night reading.
-
-### 2. Frictionless Side View (Peeking Drawer)
-- **Zero Scroll Position Loss**: Clicking any in-text citation instantly opens the referenced section in a side panel without shifting or losing your current reading scroll location.
-- **Side-by-Side Pinning**: Pin the side view open on wider displays to compare sections side by side.
-- **Breadcrumb History**: Internal navigation trail with Back (`←`) and Forward (`→`) buttons to trace statutory lineage without losing your reading context.
-- **Direct Jump**: One-click "Jump to Section in Main Canvas" smoothly scrolls the main reading canvas to that provision with an anchor flash animation.
-
-### 3. Recursive Citation Cascade (Nest View up to 6 Levels)
-- **Multi-Level Auto-Fetching**: Explores statutory dependencies from Level 1 direct citations through Levels 2, 3, 4, 5, up to Level 6 deep authority cross-references.
-- **Cycle Detection**: Automatically halts recursion when provision cycles are encountered (e.g., Provision A cites Provision B and B cites A), displaying an alert badge: `[Cycle Detected: Target at Level X]` with zero crashes.
-- **Chromatic Level Badging**:
-  - `Level 1`: Royal Indigo (`bg-indigo-100 text-indigo-800`) - Direct reference
-  - `Level 2`: Bright Cyan (`bg-cyan-100 text-cyan-800`) - Secondary cascade
-  - `Level 3`: Emerald Green (`bg-emerald-100 text-emerald-800`) - Tertiary cross-reference
-  - `Level 4`: Warm Amber (`bg-amber-100 text-amber-800`) - Quaternary dependency
-  - `Level 5`: Crimson Rose (`bg-rose-100 text-rose-800`) - Quinary sub-chain
-  - `Level 6`: Regal Violet (`bg-purple-100 text-purple-800`) - Deepest authority
-- **Metrics Dashboard**: Displays total nodes, max depth reached, cycle halts, and external statute references.
-
-### 4. Index-Based Browsing & Dynamic Scroll Synchronization
-- **3-Tier Synchronized Top-Bar Dropdown**:
-  - `Section` > `Sub-section` > `Clause`
-  - Real-time `useScrollSpy` hook dynamically updates the active tier dropdowns as you scroll through the statutory provisions.
-  - Selecting any dropdown tier smoothly jumps directly to that provision.
-- **Collapsible Table of Contents (TOC)**:
-  - Instant filter search across section titles and numbers.
-  - Collapsible tree revealing subsections and clauses.
-  - Real-time active provision indicator matching document position.
-  - Quick badges showing outgoing citation counts and amendment notes.
-
-### 5. Instant Global Quick Search (Ctrl + K)
-- Full-text search across 1,692 provisions, 555 cross-citations, and 113 amendment footnotes.
-- Instant keyboard navigation (Arrow Up/Down, Enter to jump, Esc to close).
+```
+StatuteGraph  ·  by Utharam  ·  free · no signup · zero cloud uploads
+```
 
 ---
 
-## 🏛️ Dataset Details
+## Why it exists
 
-- **Act Title**: The Central Goods and Services Tax Act, 2017 (Act No. 12 of 2017)
-- **Source**: Updated up to 30th September, 2020 (Akoma Ntoso JSON format)
-- **Provisions**: 1,692 statutory sections, subsections, clauses, sub-clauses, provisos, and explanations.
-- **Citations**: 555 statutory cross-references (both internal CGST sections and external acts such as the Transfer of Property Act, Information Technology Act, Chartered Accountants Act).
-- **Footnotes**: 113 statutory amendment notes.
+Statutes are not flat text. A single 1,700-provision Act contains hundreds of
+cross-references, and the references are where the reading difficulty lives: a
+reader has to answer "what does this provision actually point at?" on every
+mention, and a PDF or a naive text dump cannot.
+
+StatuteGraph answers that question from the statutory words themselves, and it is
+willing to tell you when the source document cannot support an answer.
 
 ---
 
-## 🚀 Getting Started
+## Quick start
 
-### Prerequisites
-- Node.js (v18 or higher)
-- npm (v9 or higher)
-
-### Installation
 ```bash
-# Clone or navigate to the repository
-cd "d:/Projects/AKN reader"
-
-# Install dependencies
 npm install
-```
-
-### Running Development Server
-```bash
-npm run dev
-```
-The application will launch at `http://localhost:3000`.
-
-### Production Build
-```bash
-npm run build
-```
-Build output will be bundled into `dist/`.
-
-### Preview Production Build
-```bash
+npm run dev      # http://localhost:3000
+npm test         # 156 tests
+npm run build    # tsc + vite build
 npm run preview
 ```
 
----
-
-## 🏗️ Project Architecture
-
-```
-d:/Projects/AKN reader/
-├── public/
-│   └── data/
-│       └── cgst-act.json            # AKN JSON statutory dataset (2.37 MB)
-├── src/
-│   ├── types/
-│   │   └── akn.ts                   # TypeScript schemas for provisions, citations, footnotes, tree
-│   ├── services/
-│   │   ├── aknLoader.ts             # Dataset ingestion, normalization, text sanitation, citation resolver
-│   │   ├── citationEngine.ts        # 6-level recursive citation cascade & cycle detection
-│   │   └── hierarchyBuilder.ts      # 3-tier Section > Sub-section > Clause index constructor
-│   ├── hooks/
-│   │   ├── useScrollSpy.ts          # Synchronized continuous reading viewport observer
-│   │   └── useReaderSettings.ts     # Theme, font-size, layout & persistence management
-│   ├── components/
-│   │   ├── Header.tsx               # Sticky header with 3-tier dropdowns, theme & typography controls
-│   │   ├── ContinuousReader.tsx     # Continuous legal statute layout with marginalia & provisos
-│   │   ├── SidebarTOC.tsx           # Hierarchical collapsible Table of Contents with live filter
-│   │   ├── SideViewPanel.tsx        # Frictionless peeking drawer with citation history navigation
-│   │   ├── StatuteTextRenderer.tsx  # In-text citation pills and amendment popover span slicer
-│   │   ├── FootnotePopover.tsx      # Amendment details card (Amending Act, action, date)
-│   │   ├── NestedCitationTree.tsx   # 6-level recursive tree visualizer with summary metrics
-│   │   ├── CitationNodeCard.tsx     # Chromatic level cards with branch collapse and cycle badges
-│   │   └── SearchModal.tsx          # Ctrl+K global quick search
-│   ├── App.tsx                      # Root coordinator
-│   ├── main.tsx                     # Entry point
-│   └── index.css                    # Design tokens, themes, custom scrollbars, typography
-├── index.html                       # HTML template with Google Fonts (Newsreader, Inter)
-├── package.json                     # v1.0.0 SemVer manifest
-├── tailwind.config.js               # Tailwind configuration
-├── tsconfig.json                    # TypeScript compiler configuration
-└── vite.config.ts                   # Vite bundler configuration
-```
+Stack: React 18, TypeScript, Vite, Tailwind. No backend, no network calls at
+runtime, no accounts, no telemetry.
 
 ---
 
-## 📜 License
-Released under the MIT License.
+## Using it
+
+### 1. Open a document
+
+The app opens on a library page.
+
+- **Open** — file picker restricted to `.json`.
+- **Drop** — drag a JSON file anywhere in the window, on the library or on an
+  open document. The reader switches to it immediately.
+- **Remembered** — documents you open are kept in IndexedDB, so the library
+  survives a refresh. Delete them from the card when you want them gone.
+
+### 2. Read it
+
+- **Continuous canvas** — provisions in page order, with proviso and explanation
+  framing and interactive amendment footnotes.
+- **Header tiers** — four chained dropdowns (section → sub-section → clause →
+  proviso) that follow your scroll position. Each tier only offers children of
+  its own kind, so a "Sub-section" list never contains sections.
+- **Sidebar index** — collapsible tree to full depth, with a filter that searches
+  numbers, titles and every descendant.
+- **Search** — Ctrl/Cmd+K full-text search across all provisions.
+- **Appearance** — three reading themes (Parchment / Slate / Dark), four font
+  sizes, serif toggle.
+
+### 3. Follow references
+
+- **Outgoing** — every in-text reference is a clickable pill that opens the side
+  panel without moving your scroll position.
+- **Incoming** — the **Cited Elsewhere** tab answers "which provisions refer to
+  this one?", grouped by the citing section. Sections carry inbound count badges.
+- **Nest view** — a six-level recursive cascade with cycle detection and fan-out
+  caps, so a circular reference cannot hang the page.
+
+Reference *semantics* are modelled rather than flattened, because
+`subject_to` and `notwithstanding` are opposite legal operations:
+
+| Relation | Rendering |
+|---|---|
+| `reference` | indigo pill |
+| `subject_to` | violet pill — "operates subject to" |
+| `notwithstanding` | rose pill — "overrides" |
+
+---
+
+## Accepted format
+
+The reader expects the export produced by **[LexParser](https://lexparser.utharam.in/)**,
+the PDF-to-JSON converter built for it: a JSON object with top-level
+`provisions`, `citations` and `footnotes` arrays, where each provision carries at
+least `eid`, `kind`, `num` and `text`.
+
+Have a PDF and no JSON? Convert it with LexParser first, then drop the result
+onto the library or the reading canvas.
+
+```jsonc
+{
+  "provisions": [
+    {
+      "eid": "sec_44",              // unique; also the anchor id
+      "kind": "section",            // chapter | section | schedule | subsection | ...
+      "num": "44",
+      "title": "Apprenticeship registration",
+      "text": "...",
+      "parent_eid": null,           // this is the hierarchy source of truth
+      "citations": [
+        { "text": "section 13", "start": 88, "end": 99, "target_eid": "sec_13",
+          "relation": "reference" }
+      ],
+      "footnotes": [],
+      "amendments": []
+    }
+  ]
+}
+```
+
+Hierarchy comes from `parent_eid`. Generic Akoma Ntoso XML/JSON is deliberately
+**not** accepted: guessing at an unknown schema produces a reader that silently
+shows the wrong thing, which is worse than a clear rejection.
+
+Files are validated before anything is indexed, and failures name the file and
+say what is wrong:
+
+| Problem | Message |
+|---|---|
+| Not JSON | `broken.json is not valid JSON.` + the parser's own error |
+| No `provisions` array | `… has no "provisions" array.` |
+| Empty `provisions` | `… contains no provisions.` |
+| Missing `eid` / `kind` / `num` / `text` | `… is missing the "text" field on its first provision.` |
+| Duplicate provision ids | `… contains duplicate provision ids (sec_7).` |
+| Citation pointing at a missing provision | `… has 12 citation(s) pointing at provisions that do not exist.` |
+| Larger than 128 MB | `… is 200 MB, larger than the 128 MB limit.` |
+
+Nothing enters the library until it validates.
+
+---
+
+## Correctness guarantees
+
+The reader's most important property is that it never claims a reference points
+at a provision it does not.
+
+**Reference scope is decided from the statutory words, never from `target_eid`.**
+In the bundled dataset, many references flagged `external: true` carry a
+`target_eid` that collides with a real section of this Act:
+
+| Cited as | Parser's `target_eid` | What this reader shows |
+|---|---|---|
+| "section 148 of the Companies Act, 2013" | `sec_148` | The Companies Act, 2013 |
+| "section 6 of the Registration Act, 1908" | `sec_6` | The Registration Act, 1908 |
+| "section 136 of the Finance Act, 2001" | `sec_136` | The Finance Act, 2001 |
+
+Trusting `target_eid` opened the wrong statute. Conversely, references to "the
+said Act" that the parser flagged external are correctly treated as internal.
+
+Other enforced invariants, all covered by `src/tests/dataset.test.ts`:
+
+- Every citation span indexes its own parent's raw text **exactly**. Text is
+  sliced raw and cleaned per segment, because cleaning first would shift every
+  offset.
+- A provision is only ever given its **own** citations when rendering its text.
+  Passing a descendant's citations against a parent's text is what previously
+  scattered citation pills over unrelated prose.
+- Top-level index entries are only genuine `section` / `schedule` / `chapter`
+  nodes. Provisions whose parent section the parser lost are never presented as
+  sections.
+- When a citation names a sub-provision the parser never extracted, the reader
+  steps down to the parent section **and says so**, rather than silently opening
+  the wrong node.
+- Citation trees halt on cycles, cap fan-out, and report what they trimmed.
+
+---
+
+## Honest about the data
+
+Real parser output is imperfect, and the reader says so rather than papering
+over it. Open **Data quality** in the bottom-left for live figures.
+
+| Situation | How it is handled |
+|---|---|
+| Provision has no `parent_eid` | Shown in page order with an `UNPLACED` badge and a collapsed "Not attached to a section" disclosure. Excluded from the index, because guessing a parent would be a fabrication. |
+| Provision has empty own-text but non-empty descendants | Reported by the subtree character count, not as empty. "No text" and "no content" are different facts. |
+| Sub-provision not extracted by the parser | Citation degrades to the parent section with a visible notice. |
+| Citation target does not exist | Dashed pill, marked as unresolved. |
+| Footnote with no `associated_eid` | Re-homed from the provision's inline `amendments`, else reachable from its in-text marker. |
+
+Detached provisions are interleaved into the reading stream by page position
+rather than dumped at the end, so page order still matches the source.
+
+---
+
+## Privacy
+
+| | |
+|---|---|
+| Cloud transmit | **0 bytes** — documents never leave the browser |
+| Storage | IndexedDB, this browser only |
+| Accounts / signup | none |
+| Trackers / analytics / ads | none |
+| Offline | works after first load; no network needed to read |
+
+---
+
+## Architecture
+
+```
+src/branding.ts                    Product name, author credit and the LexParser
+                                   link. Single source of truth; a rename is one
+                                   edit.
+
+src/types/akn.ts                   Raw* shapes vs. normalised model.
+                                   Citation.target is a discriminated union on
+                                   scope (internal / external / unresolved).
+
+src/services/
+  documentStore.ts                 IndexedDB persistence for opened documents.
+  documentLibrary.ts               Catalogue, validation, metadata derivation,
+                                   opening. Built-ins live in BUILTIN_DOCUMENTS.
+  citationScope.ts                 Decides internal vs. external from the
+                                   statutory words.
+  aknLoader.ts                     Normalise, build the tree, build the citation
+                                   graph BOTH ways, split detached provisions
+                                   from real sections, produce a quality report.
+  hierarchyBuilder.ts              Nav tree; tiers by kind; backlink counts.
+  citationEngine.ts                6-level cascade, cycle detection, fan-out
+                                   caps, text slicing, relation styling.
+
+src/hooks/
+  useDocumentLibrary.ts            Library state; add/remove; storage probing.
+  useScrollSpy.ts                  One IntersectionObserver. A previous rAF loop
+                                   forced hundreds of synchronous layouts per frame.
+  useReaderSettings.ts             Theme, font, layout; validates localStorage.
+
+src/components/
+  HomePage.tsx                     Document library: open, recents, drop zone.
+  GlobalDropZone.tsx               Window-level drop target with a drag counter.
+  Header.tsx                       Home, document identity, tier picker,
+                                   typography and theme controls.
+  NavigationPicker.tsx             Kind-aware tiered index dropdowns.
+  SidebarTOC.tsx                   Full-depth collapsible index with badges.
+  ContinuousReader.tsx             Reading canvas, marginalia, provisos.
+  SideViewPanel.tsx                Provision Text / Cited Elsewhere / Nest.
+  StatuteTextRenderer.tsx          Citation pills and amendment footnotes.
+  CitationNodeCard.tsx             Chromatic level cards with cycle badges.
+  NestedCitationTree.tsx           6-level cascade with metrics.
+  FootnotePopover.tsx              Amendment details.
+  SearchModal.tsx                  Ctrl+K full-text search.
+
+src/tests/                         156 tests, mostly against the real JSON
+```
+
+### Performance notes
+
+The 8,699-provision Income-tax Act is the stress case. What keeps it workable:
+
+- `React.memo` on the reader canvas and side panel, with stable callbacks, so
+  theme and font changes do not re-render 8,699 provision cards.
+- The bulk raw `provisions` / `citations` arrays are released after indexing;
+  only the normalised index is retained.
+- `content-visibility: auto` with `contain-intrinsic-size` on provision cards, so
+  off-screen cards cost layout only as they approach the viewport.
+
+---
+
+### Notes for future work
+
+- **Do not "fix" the loader to prefer `akomaNtoso.act.body`.** That tree is
+  incomplete and disagrees with `parent_eid`; adopting it silently deletes edges.
+- The loader is document-agnostic. Nothing in `src/` may branch on a particular
+  Act — the title in the header comes from the document's own metadata.
+- `EXTERNAL_ACTS` in `citationScope.ts` is optional description data only. Scope
+  is decided purely by pattern, so an unfamiliar Act is still correctly reported
+  as another statute. Never let it decide scope.
+- Citation identity is `parentEid#start-end`. Two genuine references in one
+  provision cannot share a span, so this is a safe dedupe key — but any synthetic
+  fixture must respect it.
+- To ship another statute as a built-in, add its JSON to `public/data/` and one
+  entry to `BUILTIN_DOCUMENTS`.
+- `fix-loader.cjs` and `fix-soft-hyphens.cjs` in the repo root are inert
+  one-shot scripts that rewrote the loader in place. Prefer deleting them over
+  running them.
+
+---
+
+## Related Utharam tools
+
+- [LexParser](https://lexparser.utharam.in/) — the PDF-to-JSON converter that
+  produces the documents this reader opens
+- [LexHop Reader](https://lexhop.utharam.in/) — jump to any word while reading,
+  with KWIC concordance and a clause comparison tray
+- [GST Interactive](https://gstinteractive.netlify.app/) — statutory simulator
+  and study notes
+- [All tools](https://utharam.in/) — every free, offline-first utility
+
+## Licence
+
+Open source. See the repository for details.

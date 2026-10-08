@@ -1,12 +1,7 @@
 import React from 'react';
-import {
-  HierarchySectionItem,
-  HierarchySubsectionItem,
-  HierarchyClauseItem,
-  ThemeMode,
-  FontSize,
-} from '../types/akn';
+import { HierarchyNavItem, ThemeMode, FontSize } from '../types/akn';
 import { HierarchyIndex } from '../services/hierarchyBuilder';
+import { StatuteDocument } from '../services/documentLibrary';
 import {
   Search,
   BookOpen,
@@ -17,15 +12,16 @@ import {
   Type,
   SidebarClose,
   SidebarOpen,
+  House,
 } from 'lucide-react';
 
 import { NavigationPicker } from './NavigationPicker';
+import { PRODUCT_NAME } from '../branding';
 
 interface HeaderProps {
   hierarchyIndex: HierarchyIndex | null;
-  activeSection: HierarchySectionItem | null;
-  activeSubsection: HierarchySubsectionItem | null;
-  activeClause: HierarchyClauseItem | null;
+  /** The provision currently being read, at any depth. */
+  activeItem: HierarchyNavItem | null;
   onSelectProvision: (eid: string) => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
@@ -38,13 +34,13 @@ interface HeaderProps {
   onOpenSearch: () => void;
   isSideViewOpen: boolean;
   onToggleSideView: () => void;
+  document: StatuteDocument;
+  onHome: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   hierarchyIndex,
-  activeSection,
-  activeSubsection,
-  activeClause,
+  activeItem,
   onSelectProvision,
   theme,
   onThemeChange,
@@ -57,42 +53,62 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSearch,
   isSideViewOpen,
   onToggleSideView,
+  document,
+  onHome,
 }) => {
-  return (
-    <header className="sticky top-0 z-30 w-full h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs">
-      <div className="max-w-7xl mx-auto h-full px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Left: Act Logo & TOC Toggle */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+return (
+    <header className="sticky top-0 z-30 w-full h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+      {/*
+        Full width rather than a centred max-width container. The previous
+        `max-w-7xl mx-auto justify-between` combined with `max-w-2xl` on the
+        picker left a large dead gap between the title and the dropdowns, and
+        pushed the tier controls into an overflow-x scrollbar because they no
+        longer fit. Now the picker is the only flexible element and absorbs
+        whatever is left.
+      */}
+      <div className="h-full w-full px-2 sm:px-3 lg:px-4 flex items-center gap-2 lg:gap-3">
+        {/* Left: Home, TOC toggle, document identity */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={onHome}
+            className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Back to your document library"
+          >
+            <House className="w-[18px] h-[18px]" />
+          </button>
+
           <button
             type="button"
             onClick={onToggleToc}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title={isTocOpen ? 'Hide Table of Contents' : 'Show Table of Contents'}
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-[18px] h-[18px]" />
           </button>
 
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-xs">
-              <BookOpen className="w-4 h-4" />
+          <div className="flex items-center gap-2 min-w-0 ml-1 pl-1.5 border-l border-slate-200 dark:border-slate-800">
+            <div className="w-7 h-7 rounded-lg bg-amber-600 flex items-center justify-center text-white shadow-sm shrink-0">
+              <BookOpen className="w-3.5 h-3.5" />
             </div>
-            <div className="hidden md:block">
-              <div className="text-xs font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
-                CGST ACT 2017
+            <div className="hidden lg:block min-w-0 max-w-[13rem] 2xl:max-w-[22rem]">
+              <div
+                className="text-[11px] font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight truncate"
+                title={document.title}
+              >
+                {document.shortTitle.toUpperCase()}
               </div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-none">
-                AKN Legal Reader
+              <div className="text-[9px] text-slate-500 dark:text-slate-400 font-medium leading-none truncate">
+                {PRODUCT_NAME}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Center: 3-Tier Synchronized Dropdown Picker */}
+        {/* Centre: the tier picker takes every remaining pixel */}
         <NavigationPicker
           hierarchyIndex={hierarchyIndex}
-          activeSection={activeSection}
-          activeSubsection={activeSubsection}
-          activeClause={activeClause}
+          activeItem={activeItem}
           onSelectProvision={onSelectProvision}
         />
 
@@ -121,7 +137,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onFontSizeChange(sz)}
                 className={`px-1.5 py-0.5 text-xs font-medium rounded ${
                   fontSize === sz
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-bold'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-bold'
                     : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
                 title={`Font size ${sz}`}
@@ -152,7 +168,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => onThemeChange('parchment')}
               className={`p-1 rounded ${
                 theme === 'parchment'
-                  ? 'bg-amber-200/90 text-amber-900 shadow-2xs'
+                  ? 'bg-amber-200/90 text-amber-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
               title="Parchment Theme"
@@ -164,7 +180,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => onThemeChange('slate')}
               className={`p-1 rounded ${
                 theme === 'slate'
-                  ? 'bg-blue-100 text-blue-900 shadow-2xs'
+                  ? 'bg-blue-100 text-blue-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
               title="Slate Light Theme"
@@ -176,7 +192,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => onThemeChange('dark')}
               className={`p-1 rounded ${
                 theme === 'dark'
-                  ? 'bg-slate-700 text-white shadow-2xs'
+                  ? 'bg-slate-700 text-white shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
               title="Obsidian Dark Theme"

@@ -2,73 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Theme tokens.
+
+  Only `--bg-canvas` and `--text-main` are consumed, by the `body` rule below.
+  A previous version defined twelve more tokens that nothing referenced, which
+  made the three themes look identical in the UI while appearing configurable
+  here. The tokens that remain genuinely drive Parchment / Slate / Dark: the
+  page canvas and text colour differ per theme, and no utility class on <body>
+  overrides them (see index.html).
+*/
 @layer base {
   :root {
-    --bg-canvas: #FAF7EE;
-    --bg-surface: #F2EBDC;
-    --bg-card: #FFFFFF;
-    --text-main: #2A2315;
-    --text-muted: #6B5E4A;
-    --border-color: #E2D7C3;
-    --accent-color: #92400E;
-    --citation-bg: #FEF3C7;
-    --citation-text: #92400E;
-    --citation-border: #FCD34D;
-    --proviso-bg: #FDF9EE;
-    --proviso-border: #D97706;
-    --explanation-bg: #F6F4EB;
-    --explanation-border: #0D9488;
+    --bg-canvas: #faf7ee;
+    --text-main: #2a2315;
   }
 
   .theme-parchment {
-    --bg-canvas: #FAF7EE;
-    --bg-surface: #F3EBD8;
-    --bg-card: #FFFDF9;
-    --text-main: #2B2416;
-    --text-muted: #72634C;
-    --border-color: #E2D6C0;
-    --accent-color: #92400E;
-    --citation-bg: #FEF3C7;
-    --citation-text: #92400E;
-    --citation-border: #FCD34D;
-    --proviso-bg: #FDF9EE;
-    --proviso-border: #D97706;
-    --explanation-bg: #F5F1E5;
-    --explanation-border: #0D9488;
+    --bg-canvas: #faf7ee;
+    --text-main: #2a2315;
   }
 
   .theme-slate {
-    --bg-canvas: #F8FAFC;
-    --bg-surface: #F1F5F9;
-    --bg-card: #FFFFFF;
-    --text-main: #0F172A;
-    --text-muted: #475569;
-    --border-color: #E2E8F0;
-    --accent-color: #1D4ED8;
-    --citation-bg: #EFF6FF;
-    --citation-text: #1D4ED8;
-    --citation-border: #BFDBFE;
-    --proviso-bg: #F8FAFC;
-    --proviso-border: #3B82F6;
-    --explanation-bg: #F1F5F9;
-    --explanation-border: #0284C7;
+    --bg-canvas: #f8fafc;
+    --text-main: #0f172a;
   }
 
   .theme-dark {
-    --bg-canvas: #090D16;
-    --bg-surface: #0F172A;
-    --bg-card: #182234;
-    --text-main: #F1F5F9;
-    --text-muted: #94A3B8;
-    --border-color: #334155;
-    --accent-color: #38BDF8;
-    --citation-bg: #1E293B;
-    --citation-text: #38BDF8;
-    --citation-border: #0284C7;
-    --proviso-bg: #141E2E;
-    --proviso-border: #F59E0B;
-    --explanation-bg: #0F1F2C;
-    --explanation-border: #14B8A6;
+    --bg-canvas: #090d16;
+    --text-main: #f1f5f9;
   }
 
   body {
@@ -78,7 +40,7 @@
   }
 }
 
-/* Custom delicate scrollbars for legal reader */
+/* Custom delicate scrollbars for legal reading */
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
@@ -105,6 +67,42 @@
   background-color: rgba(148, 163, 184, 0.45);
 }
 
+/*
+  Hide a scrollbar while keeping the element scrollable.
+
+  Local replacement for `no-scrollbar`, which is a daisyUI class and does not
+  exist in this Tailwind build.
+*/
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /*
+    Local replacement for `animate-in fade-in zoom-in-95`, which requires the
+    tailwindcss-animate plugin (not installed).
+  */
+  .pop-in-150 {
+    animation: pop-in 150ms ease-out;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
@@ -115,6 +113,31 @@ html {
   line-height: 1.8;
   word-spacing: 0.05em;
   letter-spacing: 0.01em;
+}
+
+/*
+  Rendering containment for the reading canvas.
+
+  A full Act is a very long page: the Income-tax Act 2025 renders about 219,000
+  DOM elements. Without this the browser lays out and paints every one of them,
+  including the ~200,000 that are off screen, which is what makes scrolling
+  stutter and Chrome hang.
+
+  `content-visibility: auto` lets the engine skip layout and paint for anything
+  outside the viewport while keeping the nodes in the DOM, so in-page search,
+  anchors and the scroll-spy observer all keep working.
+  `contain-intrinsic-size` reserves a plausible height so the scrollbar does not
+  jump as sections are skipped.
+*/
+.provision-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .provision-card {
+    transition: border-color 150ms ease;
+  }
 }
 
 /* Highlight flash for scrolled-to provisions */
@@ -129,4 +152,15 @@ html {
 
 .target-highlight {
   animation: provision-pulse 2.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .target-highlight,
+  .pop-in-150 {
+    animation: none;
+  }
 }

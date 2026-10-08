@@ -1,167 +1,123 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { HierarchyIndex } from '../services/hierarchyBuilder';
-import {
-  HierarchySectionItem,
-  HierarchySubsectionItem,
-  HierarchyClauseItem,
-} from '../types/akn';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { HierarchyIndex, HierarchyNavItem } from '../types/akn';
+
+/** Height of the sticky header, in px. Must match `top-16` (64px) plus slack. */
+const HEADER_OFFSET = 88;
 
 export interface ActiveLocation {
-  activeSection: HierarchySectionItem | null;
-  activeSubsection: HierarchySubsectionItem | null;
-  activeClause: HierarchyClauseItem | null;
+  /** The provision currently being read, at any depth. */
+  activeItem: HierarchyNavItem | null;
+  /** The document-level unit containing it. */
+  activeSection: HierarchyNavItem | null;
   activeEid: string | null;
 }
 
+/**
+ * Tracks which provision the reader is looking at, and scrolls to a provision
+ * on demand.
+ *
+ * The previous implementation ran a `scroll` + `requestAnimationFrame` loop
+ * that called `querySelectorAll('article[data-provision-eid]')` and then
+ * `getBoundingClientRect()` on every one of the 397 articles, plus every
+ * descendant of the active one, on every animation frame — roughly 448 forced
+ * synchronous layouts per frame. A single IntersectionObserver with a top-biased
+ * root margin reports the same answer without touching layout.
+ */
 export function useScrollSpy(hierarchyIndex: HierarchyIndex | null) {
   const [activeLocation, setActiveLocation] = useState<ActiveLocation>({
+    activeItem: null,
     activeSection: null,
-    activeSubsection: null,
-    activeClause: null,
     activeEid: null,
   });
 
-  const isManualScrolling = useRef<boolean>(false);
-  const scrollTimeout = useRef<number | null>(null);
+  const suppressSpy = useRef(false);
+  const suppressTimer = useRef<number | null>(null);
 
-  const scrollToProvision = useCallback((eid: string) => {
-    isManualScrolling.current = true;
-    if (scrollTimeout.current) {
-      window.clearTimeout(scrollTimeout.current);
-    }
-
-    const element = document.getElementById(`prov-${eid}`);
-    if (element) {
-      const headerOffset = 90;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth',
+  const setActive = useCallback(
+    (eid: string) => {
+      const item = hierarchyIndex?.eidToNavItemMap.get(eid);
+      if (!item) return;
+      setActiveLocation((prev) => {
+        if (prev.activeEid === eid) return prev;
+        return {
+          activeItem: item,
+          // Display fallback: a detached provision belongs to no section, so
+          // the Section dropdown shows the nearest preceding one instead of
+          // blanking. Without this it would blank once per orphan, scattered
+          // through the Act.
+          activeSection:
+            hierarchyIndex?.eidToDisplaySectionMap.get(eid) ??
+            hierarchyIndex?.eidToSectionMap.get(eid) ??
+            null,
+          activeEid: eid,
+        };
       });
+    },
+    [hierarchyIndex]
+  );
 
-      // Highlight target temporarily
+  const scrollToProvision = useCallback(
+    (eid: string) => {
+      const element = document.getElementById(`prov-${eid}`);
+      if (!element) return;
+
+      suppressSpy.current = true;
+      if (suppressTimer.current) window.clearTimeout(suppressTimer.current);
+
+      const top = element.getBoundingClientRect().top + window.pageYOffset - HEADER_OFFSET;
+      window.scrollTo({ top, behavior: 'smooth' });
+
+      // Restart the flash animation even if the class is still attached.
       element.classList.remove('target-highlight');
-      // Trigger reflow
       void element.offsetWidth;
       element.classList.add('target-highlight');
 
-      // Update location immediately on user click
-      if (hierarchyIndex) {
-        const sec = hierarchyIndex.eidToSectionMap.get(eid) || null;
-        const subsec = hierarchyIndex.eidToSubsectionMap.get(eid) || null;
-        const clause = hierarchyIndex.eidToClauseMap.get(eid) || null;
-        setActiveLocation({
-          activeSection: sec,
-          activeSubsection: subsec,
-          activeClause: clause,
-          activeEid: eid,
-        });
-      }
-    }
+      setActive(eid);
 
-    scrollTimeout.current = window.setTimeout(() => {
-      isManualScrolling.current = false;
-    }, 800);
-  }, [hierarchyIndex]);
+      suppressTimer.current = window.setTimeout(() => {
+        suppressSpy.current = false;
+      }, 700);
+    },
+    [setActive]
+  );
 
   useEffect(() => {
     if (!hierarchyIndex || hierarchyIndex.sections.length === 0) return;
+    if (typeof IntersectionObserver === 'undefined') return;
 
-    let ticking = false;
+    // Every navigable element carries `data-provision-eid`, so one observer
+    // covers all four tiers.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (suppressSpy.current) return;
 
-    const handleScroll = () => {
-      if (isManualScrolling.current) return;
-
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const viewportCheckY = 140;
-          let bestMatch: Element | null = null;
-
-          // Check if user is scrolled near bottom of page
-          const isNearBottom =
-            window.innerHeight + window.scrollY >=
-            document.documentElement.scrollHeight - 60;
-
-          const articles = document.querySelectorAll('article[data-provision-eid]');
-
-          if (isNearBottom && articles.length > 0) {
-            const lastArticle = articles[articles.length - 1];
-            const children = lastArticle.querySelectorAll('[data-provision-eid]');
-            bestMatch = children.length > 0 ? children[children.length - 1] : lastArticle;
-          } else {
-            // Find the active article intersecting or above the check line
-            let activeArticle: Element | null = null;
-            for (let i = 0; i < articles.length; i++) {
-              const el = articles[i];
-              const rect = el.getBoundingClientRect();
-
-              if (rect.top <= viewportCheckY) {
-                activeArticle = el;
-              } else if (rect.top > viewportCheckY + 300) {
-                break;
-              }
-            }
-
-            if (!activeArticle && articles.length > 0) {
-              activeArticle = articles[0];
-            }
-
-            if (activeArticle) {
-              bestMatch = activeArticle;
-              // Search child subsections and clauses inside this article
-              const children = activeArticle.querySelectorAll('[data-provision-eid]');
-              for (let j = 0; j < children.length; j++) {
-                const child = children[j];
-                const childRect = child.getBoundingClientRect();
-                if (childRect.top <= viewportCheckY && childRect.bottom >= 40) {
-                  bestMatch = child;
-                }
-              }
-            }
+        // Choose the entry whose top is closest to the header but still above it.
+        let best: IntersectionObserverEntry | null = null;
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          if (entry.boundingClientRect.top > HEADER_OFFSET + 40) continue;
+          if (!best || entry.boundingClientRect.top < best.boundingClientRect.top) {
+            best = entry;
           }
+        }
 
-          if (bestMatch) {
-            const eid = bestMatch.getAttribute('data-provision-eid');
-            if (eid) {
-              const sec = hierarchyIndex.eidToSectionMap.get(eid) || null;
-              const subsec = hierarchyIndex.eidToSubsectionMap.get(eid) || null;
-              const clause = hierarchyIndex.eidToClauseMap.get(eid) || null;
+        if (!best) return;
+        const eid = (best.target as HTMLElement).dataset.provisionEid;
+        if (eid) setActive(eid);
+      },
+      // A shallow band just under the header: only provisions crossing it are
+      // reported, so the callback stays cheap regardless of corpus size.
+      { rootMargin: `-${HEADER_OFFSET}px 0px -70% 0px`, threshold: 0 }
+    );
 
-              setActiveLocation(prev => {
-                if (prev.activeEid === eid) return prev;
-                return {
-                  activeSection: sec,
-                  activeSubsection: subsec,
-                  activeClause: clause,
-                  activeEid: eid,
-                };
-              });
-            }
-          }
-
-          ticking = false;
-        });
-
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    // Initial check
-    handleScroll();
+    const nodes = document.querySelectorAll<HTMLElement>('[data-provision-eid]');
+    nodes.forEach((node) => observer.observe(node));
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      if (scrollTimeout.current) {
-        window.clearTimeout(scrollTimeout.current);
-      }
+      observer.disconnect();
+      if (suppressTimer.current) window.clearTimeout(suppressTimer.current);
     };
-  }, [hierarchyIndex]);
+  }, [hierarchyIndex, setActive]);
 
-  return {
-    ...activeLocation,
-    scrollToProvision,
-  };
+  return { ...activeLocation, scrollToProvision };
 }

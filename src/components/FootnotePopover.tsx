@@ -7,6 +7,16 @@ interface FootnotePopoverProps {
   children: React.ReactNode;
 }
 
+/**
+ * What the amendment did, taken from the record itself.
+ * Keeps the badge meaningful for any statute rather than naming one.
+ */
+function actionLabel(footnote: Footnote): string {
+  const action = footnote.amendment?.action?.trim();
+  if (!action) return 'Amendment note';
+  return action.charAt(0).toUpperCase() + action.slice(1);
+}
+
 export const FootnotePopover: React.FC<FootnotePopoverProps> = ({ footnote, children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -46,7 +56,7 @@ export const FootnotePopover: React.FC<FootnotePopoverProps> = ({ footnote, chil
       </button>
 
       {isOpen && (
-        <div className="fixed sm:absolute z-50 bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-full sm:left-1/2 sm:-translate-x-1/2 sm:mb-2 w-auto sm:w-96 p-4 rounded-xl shadow-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed sm:absolute z-50 bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-full sm:left-1/2 sm:-translate-x-1/2 sm:mb-2 w-auto sm:w-96 p-4 rounded-xl shadow-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm pop-in-150">
           <div className="flex items-start justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 font-mono text-xs font-bold">
@@ -83,7 +93,11 @@ export const FootnotePopover: React.FC<FootnotePopoverProps> = ({ footnote, chil
             )}
             <span className="flex items-center gap-1 ml-auto text-amber-600 dark:text-amber-400">
               <ShieldAlert className="w-3.5 h-3.5" />
-              Official Gazette CGST
+              {/*
+                Derived from the record, not from a fixed statute. It used to
+                read "Official Gazette CGST" regardless of which Act was open.
+              */}
+              {actionLabel(footnote)}
             </span>
           </div>
         </div>

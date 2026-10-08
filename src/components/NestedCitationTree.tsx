@@ -3,7 +3,7 @@ import { Citation } from '../types/akn';
 import { IndexedAknData } from '../services/aknLoader';
 import { buildCitationTree, getCitationTreeStats } from '../services/citationEngine';
 import { CitationNodeCard } from './CitationNodeCard';
-import { Layers, Network, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Layers, Network, AlertTriangle, ExternalLink, HelpCircle, Scissors } from 'lucide-react';
 
 interface NestedCitationTreeProps {
   rootCitation: Citation;
@@ -31,8 +31,8 @@ export const NestedCitationTree: React.FC<NestedCitationTreeProps> = ({
   return (
     <div className="space-y-4">
       {/* Metrics Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center p-3 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
-        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-2xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center p-3 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80">
+        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-sm">
           <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
             <Network className="w-3.5 h-3.5 text-indigo-500" />
             <span>Nodes</span>
@@ -42,7 +42,7 @@ export const NestedCitationTree: React.FC<NestedCitationTreeProps> = ({
           </div>
         </div>
 
-        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-2xs">
+        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-sm">
           <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
             <Layers className="w-3.5 h-3.5 text-cyan-500" />
             <span>Max Depth</span>
@@ -52,7 +52,7 @@ export const NestedCitationTree: React.FC<NestedCitationTreeProps> = ({
           </div>
         </div>
 
-        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-2xs">
+        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-sm">
           <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
             <span>Cycles Halted</span>
@@ -62,16 +62,54 @@ export const NestedCitationTree: React.FC<NestedCitationTreeProps> = ({
           </div>
         </div>
 
-        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-2xs">
+        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-sm">
           <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
             <ExternalLink className="w-3.5 h-3.5 text-emerald-500" />
-            <span>External Acts</span>
+            <span>Other Acts</span>
           </div>
           <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-0.5">
             {stats.externalCount}
           </div>
         </div>
+
+        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-sm">
+          <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+            <span>Unresolved</span>
+          </div>
+          <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+            {stats.unresolvedCount}
+          </div>
+        </div>
+
+        <div className="p-2 bg-white dark:bg-slate-900/60 rounded-lg shadow-sm">
+          <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <Scissors className="w-3.5 h-3.5 text-slate-400" />
+            <span>Trimmed</span>
+          </div>
+          <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+            {stats.truncatedBranches}
+          </div>
+        </div>
       </div>
+
+      {/* Honest caveat rather than implying the cascade is exhaustive. */}
+      {(stats.truncatedBranches > 0 || stats.unresolvedCount > 0) && (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+          {stats.truncatedBranches > 0 && (
+            <>
+              {stats.truncatedBranches} branch{stats.truncatedBranches > 1 ? 'es' : ''} exceeded the per-level
+              fan-out cap; expand a node to see how many of its references were held back.{' '}
+            </>
+          )}
+          {stats.unresolvedCount > 0 && (
+            <>
+              {stats.unresolvedCount} reference{stats.unresolvedCount > 1 ? 's' : ''} point at provisions the
+              parser never extracted, so the cascade stops there.
+            </>
+          )}
+        </p>
+      )}
 
       {/* Chromatic Level Legend */}
       <div className="p-3 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-xs">
