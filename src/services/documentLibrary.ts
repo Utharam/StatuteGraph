@@ -68,7 +68,7 @@ export const BUILTIN_DOCUMENTS: StatuteDocument[] = [
     shortTitle: 'CGST Act, 2017',
     subtitle: 'Act No. 12 of 2017',
     source: 'India Code',
-    updatedAsOf: '30 September 2020',
+    updatedAsOf: '1 April 2026',
     origin: 'builtin',
     dataUrl: 'data/cgst-act.json',
   },

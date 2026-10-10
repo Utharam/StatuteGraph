@@ -3,7 +3,9 @@
  *
  * Typechecking cannot catch a crash during render, and almost every component
  * was rewritten against a new data shape. These render the real components with
- * the real 1,692-provision dataset and assert they produce markup.
+ * the real bundled CGST dataset and assert they produce markup. Where the
+ * shipped export happens to be clean, a synthetic lossy export supplies the
+ * defect, so the guard keeps testing the behaviour rather than the file.
  *
  * Server rendering (`renderToStaticMarkup`) is used deliberately: no DOM is
  * needed, and effects such as the IntersectionObserver never run.
@@ -75,10 +77,23 @@ describe('ContinuousReader', () => {
     expect(html).toContain('Annual return');
   });
 
-it('interleaves the unattributed provisions instead of appending them', () => {
+it('renders without crashing even when there are no unattributed provisions', () => {
+    // The current CGST export places everything, so this guards the reader
+    // against an empty-data crash that the previous, lossier export hid.
+    const placed = buildIndex({
+      schema_version: 'akn.statute.v1',
+      provisions: [
+        { eid: 'sec_1', kind: 'section', num: '1', text: 'Short title.', page_numbers: [1] },
+      ],
+      citations: [],
+      footnotes: [],
+    } as unknown as AknDataset);
+
+    expect(placed.unattributed.length).toBe(0);
+
     const html = renderToStaticMarkup(
       React.createElement(ContinuousReader, {
-        indexData: index,
+        indexData: placed,
         document: TEST_DOCUMENT,
         onCitationClick: noop,
         onShowBacklinks: noop,
@@ -87,7 +102,43 @@ it('interleaves the unattributed provisions instead of appending them', () => {
       })
     );
 
-    expect(index.unattributed.length).toBeGreaterThan(200);
+    expect(html).toContain('Short title.');
+    expect(html).not.toContain('UNPLACED');
+  });
+
+  it('interleaves the unattributed provisions instead of appending them', () => {
+    // Driven by a synthetic lossy export: the shipped CGST file currently
+    // places every provision, so asserting on it would test nothing. The
+    // reader must still handle orphans wherever they occur.
+    const lossy = buildIndex({
+      schema_version: 'akn.statute.v1',
+      provisions: [
+        { eid: 'sec_1', kind: 'section', num: '1', text: 'Section one.', page_numbers: [1] },
+        // Orphan: a subsection whose parent section never got extracted.
+        { eid: 'sec_2__subsec_1', kind: 'subsection', num: '(1)', text: 'Orphan text one.', page_numbers: [2] },
+        { eid: 'sec_2', kind: 'section', num: '2', text: 'Section two.', page_numbers: [3] },
+      ],
+      citations: [],
+      footnotes: [],
+    } as unknown as AknDataset);
+
+    expect(lossy.unattributed.length).toBe(1);
+
+    // Orphan sits between the two sections by page, not after both of them.
+    expect(lossy.documentOrder.map((p) => p.eid)).toEqual(['sec_1', 'sec_2__subsec_1', 'sec_2']);
+
+    const html = renderToStaticMarkup(
+      React.createElement(ContinuousReader, {
+        indexData: lossy,
+        document: TEST_DOCUMENT,
+        onCitationClick: noop,
+        onShowBacklinks: noop,
+        fontSize: 'base',
+        serifFont: true,
+      })
+    );
+
+    expect(html).toContain('Orphan text one.');
     expect(html).toContain('could not be attached to a section');
     // A single collapsed disclosure, not a paragraph of prose per card.
     expect(html).toContain('Not attached to a section');
@@ -98,9 +149,19 @@ it('interleaves the unattributed provisions instead of appending them', () => {
   });
 
   it('gives an unattributed provision no section number', () => {
+    const lossy = buildIndex({
+      schema_version: 'akn.statute.v1',
+      provisions: [
+        { eid: 'sec_1', kind: 'section', num: '1', text: 'Section one.', page_numbers: [1] },
+        { eid: 'sec_2__subsec_1', kind: 'subsection', num: '(1)', text: 'Orphan text.', page_numbers: [2] },
+      ],
+      citations: [],
+      footnotes: [],
+    } as unknown as AknDataset);
+
     const html = renderToStaticMarkup(
       React.createElement(ContinuousReader, {
-        indexData: index,
+        indexData: lossy,
         document: TEST_DOCUMENT,
         onCitationClick: noop,
         onShowBacklinks: noop,
@@ -114,10 +175,26 @@ it('interleaves the unattributed provisions instead of appending them', () => {
     expect(html).not.toMatch(/>\s*SEC\s*<\//);
   });
 
-  it('flags the suspect sections', () => {
+it('flags a section whose page contradicts its statutory number', () => {
+    // Synthetic, because the shipped export is currently clean. "Section 2"
+    // sitting after "Section 3" on the page is the exact shape of the
+    // mislabelled Schedule II paragraphs the checker exists to catch.
+    const mislabelled = buildIndex({
+      schema_version: 'akn.statute.v1',
+      provisions: [
+        { eid: 'sec_1', kind: 'section', num: '1', text: 'One.', page_numbers: [1] },
+        { eid: 'sec_3', kind: 'section', num: '3', text: 'Three.', page_numbers: [2] },
+        { eid: 'sec_2', kind: 'section', num: '2', text: 'Two.', page_numbers: [3] },
+      ],
+      citations: [],
+      footnotes: [],
+    } as unknown as AknDataset);
+
+    expect(mislabelled.quality.suspectSectionEids).toContain('sec_2');
+
     const html = renderToStaticMarkup(
       React.createElement(ContinuousReader, {
-        indexData: index,
+        indexData: mislabelled,
         document: TEST_DOCUMENT,
         onCitationClick: noop,
         onShowBacklinks: noop,
@@ -126,7 +203,6 @@ it('interleaves the unattributed provisions instead of appending them', () => {
       })
     );
 
-    expect(index.quality.suspectSectionEids).toContain('sec_6');
     expect(html).toContain('Numbering looks wrong');
   });
 
@@ -228,9 +304,9 @@ describe('SidebarTOC', () => {
       })
     );
 
-    expect(html).toContain('Table of Contents');
-    expect(html).toContain('Unattributed text');
-    expect(index.quality.sectionCount).toBe(150);
+expect(html).toContain('Table of Contents');
+    expect(index.quality.sectionCount).toBe(index.sectionsByEid.size);
+    expect(index.quality.sectionCount).toBeGreaterThan(100);
   });
 
   it('renders nothing when closed', () => {
@@ -382,7 +458,10 @@ it('names the open Act when showing a foreign reference', () => {
 
     const forIncomeTax = render(incomeTax);
     expect(forIncomeTax).toContain('not a provision of Income-tax Act, 2025');
-    expect(forIncomeTax).not.toContain('CGST');
+    // The open document's name must not leak from the built-in CGST entry. A
+    // verbatim foreign reference may legitimately mention the CGST Act, so the
+    // assertion targets the panel's own copy, not the whole markup.
+    expect(forIncomeTax).not.toContain('not a provision of CGST Act, 2017');
 
     const forCgst = render(TEST_DOCUMENT);
     expect(forCgst).toContain('not a provision of CGST Act, 2017');

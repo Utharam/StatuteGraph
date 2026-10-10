@@ -1,4 +1,4 @@
-# StatuteGraph (v1.1.1)
+# StatuteGraph (v1.2.0)
 
 **Statutory structure reader** — by [Utharam](https://utharam.in/)
 
@@ -64,6 +64,10 @@ The app opens on a library page.
 - **Sidebar index** — collapsible tree to full depth, with a filter that searches
   numbers, titles and every descendant.
 - **Search** — Ctrl/Cmd+K full-text search across all provisions.
+- **Copy** — one click puts a provision on the clipboard as citation-ready
+  plain text: `Section 44. Apprenticeship registration`, a blank line, then the
+  provision. The icon confirms with a check, and reports if the browser blocked
+  the clipboard instead of failing silently.
 - **Appearance** — three reading themes (Parchment / Slate / Dark), four font
   sizes, serif toggle.
 
@@ -225,6 +229,8 @@ src/services/
   aknLoader.ts                     Normalise, build the tree, build the citation
                                    graph BOTH ways, split detached provisions
                                    from real sections, produce a quality report.
+  provisionClipboard.ts           Labelled plain-text clipboard format, with a
+                                   fallback for a denied Clipboard API.
   hierarchyBuilder.ts              Nav tree; tiers by kind; backlink counts.
   citationEngine.ts                6-level cascade, cycle detection, fan-out
                                    caps, text slicing, relation styling.
@@ -242,7 +248,9 @@ src/components/
                                    typography and theme controls.
   NavigationPicker.tsx             Kind-aware tiered index dropdowns.
   SidebarTOC.tsx                   Full-depth collapsible index with badges.
-  ContinuousReader.tsx             Reading canvas, marginalia, provisos.
+ContinuousReader.tsx           Reading canvas, marginalia, provisos.
+  CopyProvisionButton.tsx        Per-provision copy control. Feedback state is
+                                 held once in the reader, not per card.
   SideViewPanel.tsx                Provision Text / Cited Elsewhere / Nest.
   StatuteTextRenderer.tsx          Citation pills and amendment footnotes.
   CitationNodeCard.tsx             Chromatic level cards with cycle badges.

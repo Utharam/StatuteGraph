@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Citation, FontSize, Provision, ProvisionKind } from '../types/akn';
 import { IndexedAknData } from '../services/aknLoader';
 import { formatProvisionDisplayTitle } from '../services/aknLoader';
 import { StatuteDocument } from '../services/documentLibrary';
 import { StatuteTextRenderer } from './StatuteTextRenderer';
+import { CopyProvisionButton, CopyStatus } from './CopyProvisionButton';
+import { buildProvisionCopyText, writeToClipboard } from '../services/provisionClipboard';
 import {
   PRODUCT_NAME,
   AUTHOR_NAME,
@@ -229,8 +231,7 @@ const ProvenanceNotice: React.FC<{
   );
 };
 
-/** Glyph for the copy-anchor control. See the note in StatuteTextRenderer. */
-const COPY_GLYPH = '\u29c9'; // two joined squares
+
 
 /**
  * Memoised on purpose.
@@ -256,14 +257,47 @@ export const ContinuousReader = React.memo(function ContinuousReader({
   const fontFamClass = serifFont ? 'font-serif' : 'font-sans';
   const suspectSections = new Set(indexData.quality.suspectSectionEids);
 
-  const copyAnchor = async (eid: string) => {
-    const url = `${window.location.origin}${window.location.pathname}#prov-${eid}`;
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // Clipboard can be denied; the anchor is still in the address bar.
-    }
-  };
+const [copiedEid, setCopiedEid] = useState<string | null>(null);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const copyTimer = useRef<number | null>(null);
+
+  // One timer for the whole canvas rather than one per card. At ~1,700 mounted
+  // provisions the per-card version was 1,700 hooks and timers to colour one
+  // icon.
+  const copyProvision = useCallback(
+    async (provision: Provision) => {
+      const text = buildProvisionCopyText(provision);
+      if (!text) return;
+
+      const ok = await writeToClipboard(text);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      setCopiedEid(provision.eid);
+      setCopyFailed(!ok);
+      copyTimer.current = window.setTimeout(() => {
+        setCopiedEid(null);
+        setCopyFailed(false);
+      }, 1800);
+    },
+    []
+  );
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+    },
+    []
+  );
+
+  const copyStatusFor = (eid: string): CopyStatus | null =>
+    copiedEid === eid ? (copyFailed ? 'failed' : 'copied') : null;
+
+  // Announced once, for screen readers, rather than via a live region per card.
+  const announcement =
+    copiedEid === null
+      ? ''
+      : copyFailed
+        ? 'Copying failed. The browser blocked clipboard access; select the text and copy manually.'
+        : 'Provision copied to clipboard.';
 
   const backlinkCount = (provision: Provision): number => {
     const sectionEid = provision.topLevelEid ?? provision.eid;
@@ -311,14 +345,11 @@ export const ContinuousReader = React.memo(function ContinuousReader({
                 {incoming}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => copyAnchor(child.eid)}
-              className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-              title="Copy anchor link"
-            >
-              <span aria-hidden="true" className="text-[12px] leading-none">{COPY_GLYPH}</span>
-            </button>
+<CopyProvisionButton
+              label={`${formatProvisionDisplayTitle(child)}, ${kindBadge(child.kind)}`}
+              status={copyStatusFor(child.eid)}
+              onCopy={() => copyProvision(child)}
+            />
           </div>
         </div>
 
@@ -449,14 +480,12 @@ const isDetached = provision.isUnattributed;
               </span>
             )}
 
-            <button
-              type="button"
-              onClick={() => copyAnchor(provision.eid)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Copy section link"
-            >
-              <span aria-hidden="true" className="text-[14px] leading-none">{COPY_GLYPH}</span>
-            </button>
+<CopyProvisionButton
+              label={formatProvisionDisplayTitle(provision)}
+              status={copyStatusFor(provision.eid)}
+              onCopy={() => copyProvision(provision)}
+              size="md"
+            />
           </div>
         </div>
 
@@ -524,6 +553,11 @@ const isDetached = provision.isUnattributed;
 
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-8 py-8 space-y-10" id="statute-continuous-canvas">
+      {/* One live region for the whole canvas. A live region per card would make
+          a screen reader announce every copy feedback in the document. */}
+      <p aria-live="polite" role="status" className="sr-only">
+        {announcement}
+      </p>
       {/* Act header */}
       <header className="text-center py-10 px-6 sm:px-10 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-600 via-amber-500 to-indigo-600" />

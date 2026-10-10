@@ -47,9 +47,13 @@ function fakeFile(name: string, content: string): File {
 
 describe('validateDataset', () => {
   it('accepts the real dataset', () => {
+    // Deliberately not pinned to exact counts: the bundled export is replaced
+    // whenever the parser is re-run, and a test that fails on a re-export tells
+    // you nothing about whether validation still works.
     const dataset = validateDataset(valid, 'cgst-act.json');
-    expect(dataset.provisions.length).toBe(1692);
-    expect(dataset.citations.length).toBe(555);
+    expect(dataset.provisions.length).toBeGreaterThan(0);
+    expect(dataset.citations.length).toBeGreaterThan(0);
+    expect(dataset.schema_version).toBe('akn.statute.v1');
   });
 
   it('accepts a minimal well-formed document', () => {
@@ -139,11 +143,13 @@ describe('metadata derivation', () => {
   });
 
   it('summarises counts without building the index', () => {
+    // Counts must agree with the payload, not with a remembered export.
     const summary = summarizeDataset(valid);
-    expect(summary.provisions).toBe(1692);
-    expect(summary.sections).toBe(150);
-    expect(summary.citations).toBe(555);
-    expect(summary.footnotes).toBe(113);
+    expect(summary.provisions).toBe(valid.provisions.length);
+    expect(summary.sections).toBe(valid.provisions.filter((p) => p.kind === 'section').length);
+    expect(summary.citations).toBe(valid.citations.length);
+    expect(summary.footnotes).toBe(valid.footnotes.length);
+    expect(summary.sections).toBeGreaterThan(0);
   });
 });
 

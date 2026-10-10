@@ -110,6 +110,11 @@ export interface IndexedAknData {
 
   footnotesByNumber: Map<string, Footnote>;
   footnotesByEid: Map<string, Footnote[]>;
+  /**
+   * Every footnote in the payload, including ones synthesised from provision
+   * amendments and ones with no owning provision. Snapshotted before the raw
+   * payload is released.
+   */
   allFootnotes: Footnote[];
 
   /** Top-level document units in reading order. */
@@ -391,8 +396,14 @@ export function buildIndex(dataset: AknDataset): IndexedAknData {
   // -- 4. Footnotes ------------------------------------------------------------
   const footnotesByNumber = new Map<string, Footnote>();
   const footnotesByEid = new Map<string, Footnote[]>();
+  // Held by reference and copied at the end of this step, because
+  // `releaseRawPayload` empties `dataset.footnotes` before the return literal
+  // is evaluated.
+  const rawFootnotes = dataset.footnotes as RawFootnote[];
+  /** Grows with synthesised footnotes so `allFootnotes` is the true total. */
+  const allFootnotes: Footnote[] = [];
 
-  for (const raw of dataset.footnotes as RawFootnote[]) {
+  for (const raw of rawFootnotes) {
     const footnote: Footnote = {
       number: raw.number,
       raw_text: raw.raw_text,
@@ -401,6 +412,7 @@ export function buildIndex(dataset: AknDataset): IndexedAknData {
       amendment: raw.amendment,
     };
     footnotesByNumber.set(footnote.number, footnote);
+    allFootnotes.push(footnote);
 
     const owner = footnote.associated_eid ? provisionsByEid.get(footnote.associated_eid) : undefined;
     if (owner) {
@@ -411,14 +423,14 @@ export function buildIndex(dataset: AknDataset): IndexedAknData {
     }
   }
 
-  // 48 of 113 footnotes carry no associated_eid. They remain reachable through
+  // Some footnotes carry no associated_eid. They remain reachable through
   // their in-text [n] marker via footnotesByNumber, but they cannot be
   // attributed to a provision, so we record how many we lost.
-  const orphanedFootnoteCount = dataset.footnotes.filter(
+  const orphanedFootnoteCount = rawFootnotes.filter(
     (fn) => !fn.associated_eid || !provisionsByEid.has(fn.associated_eid)
   ).length;
 
-  // A provision may also carry its amendments inline (56 of them do) even when
+  // A provision may also carry its amendments inline even when
   // the matching footnote record has no associated_eid. Re-home those.
   for (const raw of rawProvisions) {
     if (!raw.amendments?.length) continue;
@@ -447,6 +459,7 @@ export function buildIndex(dataset: AknDataset): IndexedAknData {
         const list = footnotesByEid.get(provision.eid) ?? [];
         list.push(synthesised);
         footnotesByEid.set(provision.eid, list);
+        allFootnotes.push(synthesised);
       }
     }
   }
@@ -662,7 +675,10 @@ export function buildIndex(dataset: AknDataset): IndexedAknData {
     incomingFromOtherSections,
     footnotesByNumber,
     footnotesByEid,
-    allFootnotes: dataset.footnotes as Footnote[],
+    // Captured before release below: reading `dataset.footnotes` inside the
+    // return literal would always yield the emptied array, so this field was
+    // silently always [].
+    allFootnotes: allFootnotes as Footnote[],
     readingOrder,
     unattributed,
     documentOrder,
