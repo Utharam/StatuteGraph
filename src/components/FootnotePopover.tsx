@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Footnote } from '../types/akn';
 import { BookOpen, Calendar, ShieldAlert } from 'lucide-react';
+import { computePopoverPosition, PopoverPosition } from './footnotePlacement';
 
 interface FootnotePopoverProps {
   footnote: Footnote;
@@ -19,21 +21,66 @@ function actionLabel(footnote: Footnote): string {
 
 export const FootnotePopover: React.FC<FootnotePopoverProps> = ({ footnote, children }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
+
+  // Measured after the panel is in the DOM, then kept correct while open: the
+  // reader scrolls underneath an open popover, and a footnote that drifts away
+  // from its popover is worse than no popover.
+  const reposition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+    setPosition(
+      computePopoverPosition(
+        trigger.getBoundingClientRect(),
+        { width: panel.offsetWidth, height: panel.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight }
+      )
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setPosition(null);
+      return;
+    }
+    reposition();
+  }, [isOpen, reposition]);
 
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleOutsideClick = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+      const target = e.target as Node;
+      if (
+        popoverRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return;
       }
+      setIsOpen(false);
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleOutsideClick);
-    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
     };
+  }, [isOpen, reposition]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
   }, [isOpen]);
 
   const amendment = footnote.amendment;
@@ -45,18 +92,35 @@ export const FootnotePopover: React.FC<FootnotePopoverProps> = ({ footnote, chil
   }
 
   return (
-    <span className="relative inline-block" ref={popoverRef}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
         className="inline-flex items-center justify-center font-mono text-xs font-semibold px-1 py-0.5 mx-0.5 rounded text-amber-700 bg-amber-100/80 hover:bg-amber-200 dark:text-amber-300 dark:bg-amber-950/70 dark:hover:bg-amber-900 border border-amber-300/60 dark:border-amber-700/60 transition-colors cursor-pointer select-none"
         title={`Footnote [${footnote.number}]: Click to inspect amendment history`}
       >
         {children}
       </button>
 
-      {isOpen && (
-        <div className="fixed sm:absolute z-50 bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-full sm:left-1/2 sm:-translate-x-1/2 sm:mb-2 w-auto sm:w-96 p-4 rounded-xl shadow-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm pop-in-150">
+      {isOpen &&
+        createPortal(
+          <div
+            ref={(node) => {
+              panelRef.current = node;
+              popoverRef.current = node;
+            }}
+            role="dialog"
+            aria-label={`Footnote ${footnote.number}`}
+            style={{
+              top: position?.top ?? 0,
+              left: position?.left ?? 0,
+              // Hidden until measured, so it never flashes at the wrong place.
+              visibility: position ? 'visible' : 'hidden',
+            }}
+            className="fixed z-50 w-96 max-w-[calc(100vw-2rem)] p-4 rounded-xl shadow-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-sm pop-in-150"
+          >
           <div className="flex items-start justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 font-mono text-xs font-bold">
@@ -100,8 +164,9 @@ export const FootnotePopover: React.FC<FootnotePopoverProps> = ({ footnote, chil
               {actionLabel(footnote)}
             </span>
           </div>
-        </div>
-      )}
-    </span>
+          </div>,
+          document.body
+        )}
+    </>
   );
 };
