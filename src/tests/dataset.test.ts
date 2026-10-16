@@ -9,7 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import raw from '../../public/data/cgst-act.json';
 import { AknDataset, Citation, Provision } from '../types/akn';
-import { buildIndex, resolveCitation, snippet, statutoryOrdinal } from '../services/aknLoader';
+import { buildIndex, cleanStatuteText, resolveCitation, snippet, statutoryOrdinal } from '../services/aknLoader';
+import { buildProvisionCopyText, formatProvisionCopyLabel } from '../services/provisionClipboard';
 import { buildHierarchyIndex } from '../services/hierarchyBuilder';
 import { buildCitationTree, sliceProvisionText } from '../services/citationEngine';
 import { classifyCitationScope, extractNamedAct, findExternalAct } from '../services/citationScope';
@@ -742,5 +743,47 @@ describe('subtree text accounting', () => {
   it('leaves no provision inside a top-level branch detached', () => {
     const underTopLevel = index.provisions.filter((p) => p.topLevelEid !== null);
     for (const provision of underTopLevel) expect(provision.isDetached).toBe(false);
+  });
+});
+
+describe('clipboard copy against the shipped dataset', () => {
+  it('quotes the operative words of a section, not just its marginal note', () => {
+    // Section 44 in the shipped export holds the marginal note "Annual return. -"
+    // and every operative word in its sub-sections. Copying own text alone
+    // produced "Section 44. Annual return\n\nAnnual return. -", which a reader
+    // pasting into a memo would reasonably take for the whole section.
+    const section = index.provisionsByEid.get('sec_44')!;
+    const copy = buildProvisionCopyText(section);
+
+    expect(copy.startsWith(`${formatProvisionCopyLabel(section)}\n\n`)).toBe(true);
+    expect(copy).toContain(cleanStatuteText(section.text));
+
+    for (const child of flatten(section.children)) {
+      const words = cleanStatuteText(child.text);
+      if (words) expect(copy).toContain(words);
+    }
+
+    expect(copy.length).toBeGreaterThan(section.subtreeTextLength);
+  });
+
+  it('quotes a section whose own text is empty at all', () => {
+    // 101 of the 189 sections in this export are exactly this shape.
+    const emptyOwnText = index.provisions.filter(
+      (p) => p.kind === 'section' && cleanStatuteText(p.text) === '' && p.subtreeTextLength > 0
+    );
+
+    expect(emptyOwnText.length).toBeGreaterThan(0);
+    for (const provision of emptyOwnText) {
+      expect(buildProvisionCopyText(provision)).not.toBe('');
+    }
+  });
+
+  it('reports nothing to copy only where the whole subtree is empty', () => {
+    // This is the condition under which the copy button may say so out loud.
+    const misleading = index.provisions.filter(
+      (p) => (buildProvisionCopyText(p) === '') !== (p.subtreeTextLength === 0)
+    );
+
+    expect(misleading.map((p) => p.eid)).toEqual([]);
   });
 });

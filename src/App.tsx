@@ -396,11 +396,12 @@ const goHome = useCallback(() => {
           />
         </div>
 
-        <SideViewPanel
+<SideViewPanel
           isOpen={settings.isSideViewOpen}
           isPinned={settings.isSideViewPinned}
           activeCitation={activeCitation}
           indexData={indexData}
+          document={activeDocument}
           activeTab={tab}
           onTabChange={setSideViewTab}
           onClose={closeSideView}

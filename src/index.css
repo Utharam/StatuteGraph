@@ -134,6 +134,18 @@ html {
   contain-intrinsic-size: auto 220px;
 }
 
+/*
+  Applied to the canvas for the duration of a jump, then removed.
+  With every card laid out for real, a target's position can be measured exactly
+  instead of against a column of 220px placeholders - which is what made a jump
+  to section 36 come to rest 11,135px short, about eleven sections. Because
+  `contain-intrinsic-size: auto` remembers a card's real size once it has been
+  laid out, the cards stay correctly sized after this class is removed.
+*/
+.measure-exact .provision-card {
+  content-visibility: visible;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .provision-card {
     transition: border-color 150ms ease;

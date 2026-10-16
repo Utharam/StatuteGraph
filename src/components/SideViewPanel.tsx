@@ -27,8 +27,15 @@ interface SideViewPanelProps {
   isPinned: boolean;
   activeCitation: Citation | null;
   indexData: IndexedAknData;
-  /** The Act currently open, used for naming it in prose. */
-  document?: StatuteDocument;
+  /**
+   * The Act currently open, used for naming it in prose.
+   *
+   * Required, not optional: this was optional, App never passed it, and every
+   * foreign reference then read "this Act" in production while the test that
+   * covered it passed the prop by hand. Making it required turns that omission
+   * into a build failure.
+   */
+  document: StatuteDocument;
   activeTab: SideViewTab;
   onTabChange: (tab: SideViewTab) => void;
   onClose: () => void;
@@ -121,7 +128,7 @@ const ownOutgoing = resolved?.ownCitations ?? [];
     : 0;
 
   // Whichever Act is open, named from its own metadata.
-  const shortActName = document?.shortTitle || document?.title || 'this Act';
+  const shortActName = document.shortTitle || document.title || 'This Act';
 
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < history.length - 1;

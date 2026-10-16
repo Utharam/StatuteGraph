@@ -22,6 +22,7 @@ import { ContinuousReader } from '../components/ContinuousReader';
 import { SidebarTOC } from '../components/SidebarTOC';
 import { NavigationPicker } from '../components/NavigationPicker';
 import { SideViewPanel } from '../components/SideViewPanel';
+import { CopyProvisionButton, CopyStatus } from '../components/CopyProvisionButton';
 import { StatuteTextRenderer } from '../components/StatuteTextRenderer';
 import { Header } from '../components/Header';
 
@@ -381,6 +382,8 @@ describe('StatuteTextRenderer', () => {
 });
 
 describe('SideViewPanel', () => {
+  // `document` is required, so these render the panel exactly as App does: with
+  // the open Act. The prop set here is the production one by construction.
   const renderPanel = (citation: Citation, tab: SideViewTab = 'provision') =>
     renderToStaticMarkup(
       React.createElement(SideViewPanel, {
@@ -388,7 +391,7 @@ describe('SideViewPanel', () => {
         isPinned: false,
         activeCitation: citation,
         indexData: index,
-
+        document: TEST_DOCUMENT,
         activeTab: tab,
         onTabChange: noop,
         onClose: noop,
@@ -506,10 +509,11 @@ it('names the open Act when showing a foreign reference', () => {
   it('renders nothing when closed', () => {
     const html = renderToStaticMarkup(
       React.createElement(SideViewPanel, {
-        isOpen: false,
+isOpen: false,
         isPinned: false,
-activeCitation: internalCitation,
+        activeCitation: internalCitation,
         indexData: index,
+        document: TEST_DOCUMENT,
         activeTab: 'provision',
         onTabChange: noop,
         onClose: noop,
@@ -520,6 +524,40 @@ activeCitation: internalCitation,
     );
 
     expect(html).toBe('');
+  });
+});
+
+describe('CopyProvisionButton', () => {
+  const renderButton = (status: CopyStatus | null) =>
+    renderToStaticMarkup(
+      React.createElement(CopyProvisionButton, {
+        label: 'Section 44',
+        status,
+        onCopy: noop,
+      })
+    );
+
+  it('offers the copy before anything has happened', () => {
+    const html = renderButton(null);
+
+    expect(html).toContain('Copy Section 44');
+  });
+
+  it('blames the browser when the clipboard is blocked', () => {
+    const html = renderButton('failed');
+
+    expect(html).toContain('blocked clipboard access');
+    // The tooltip must not still read as an invitation to copy.
+    expect(html).not.toContain('Copy Section 44');
+  });
+
+  it('explains an empty copy instead of leaving the button inert', () => {
+    // Regression: a provision whose own text is empty used to return early with
+    // no state change at all, so the reader saw nothing happen and no reason.
+    const html = renderButton('empty');
+
+    expect(html).toContain('no text of its own');
+    expect(html).not.toContain('Copy Section 44');
   });
 });
 

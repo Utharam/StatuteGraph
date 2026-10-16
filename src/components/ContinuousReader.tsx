@@ -5,7 +5,7 @@ import { formatProvisionDisplayTitle } from '../services/aknLoader';
 import { StatuteDocument } from '../services/documentLibrary';
 import { StatuteTextRenderer } from './StatuteTextRenderer';
 import { CopyProvisionButton, CopyStatus } from './CopyProvisionButton';
-import { buildProvisionCopyText, writeToClipboard } from '../services/provisionClipboard';
+import { COPY_FEEDBACK, copyProvisionToClipboard } from '../services/provisionClipboard';
 import {
   PRODUCT_NAME,
   AUTHOR_NAME,
@@ -257,47 +257,41 @@ export const ContinuousReader = React.memo(function ContinuousReader({
   const fontFamClass = serifFont ? 'font-serif' : 'font-sans';
   const suspectSections = new Set(indexData.quality.suspectSectionEids);
 
-const [copiedEid, setCopiedEid] = useState<string | null>(null);
-  const [copyFailed, setCopyFailed] = useState(false);
+const [copyState, setCopyState] = useState<{ eid: string; status: CopyStatus } | null>(null);
   const copyTimer = useRef<number | null>(null);
+  const copyRequestId = useRef(0);
+  const isMounted = useRef(true);
 
   // One timer for the whole canvas rather than one per card. At ~1,700 mounted
   // provisions the per-card version was 1,700 hooks and timers to colour one
   // icon.
-  const copyProvision = useCallback(
-    async (provision: Provision) => {
-      const text = buildProvisionCopyText(provision);
-      if (!text) return;
+  const copyProvision = useCallback(async (provision: Provision) => {
+    const requestId = ++copyRequestId.current;
+    const { status } = await copyProvisionToClipboard(provision);
 
-      const ok = await writeToClipboard(text);
-      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-      setCopiedEid(provision.eid);
-      setCopyFailed(!ok);
-      copyTimer.current = window.setTimeout(() => {
-        setCopiedEid(null);
-        setCopyFailed(false);
-      }, 1800);
-    },
-    []
-  );
+    // The clipboard write is async, so two clicks in quick succession can
+    // resolve out of order, and the canvas can unmount mid-write. Either way
+    // the feedback must describe the latest click, on a live tree, or nothing.
+    if (!isMounted.current || requestId !== copyRequestId.current) return;
 
-  useEffect(
-    () => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+    setCopyState({ eid: provision.eid, status });
+    copyTimer.current = window.setTimeout(() => setCopyState(null), 1800);
+  }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
       if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-    },
-    []
-  );
+    };
+  }, []);
 
   const copyStatusFor = (eid: string): CopyStatus | null =>
-    copiedEid === eid ? (copyFailed ? 'failed' : 'copied') : null;
+    copyState?.eid === eid ? copyState.status : null;
 
   // Announced once, for screen readers, rather than via a live region per card.
-  const announcement =
-    copiedEid === null
-      ? ''
-      : copyFailed
-        ? 'Copying failed. The browser blocked clipboard access; select the text and copy manually.'
-        : 'Provision copied to clipboard.';
+  const announcement = copyState === null ? '' : COPY_FEEDBACK[copyState.status];
 
   const backlinkCount = (provision: Provision): number => {
     const sectionEid = provision.topLevelEid ?? provision.eid;

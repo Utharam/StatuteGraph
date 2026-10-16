@@ -1,4 +1,4 @@
-# StatuteGraph (v1.2.0)
+# StatuteGraph (v1.2.1)
 
 **Statutory structure reader** — by [Utharam](https://utharam.in/)
 
